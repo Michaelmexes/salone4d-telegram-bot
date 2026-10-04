@@ -113,6 +113,40 @@ FALLBACK = (
 def handle_start(chat_id):
     tg_send(chat_id, WELCOME, reply_markup=MAIN_KB)
 
+def handle_applink(chat_id):
+    app_url = getattr(config, "APP_LINK", "https://t.ly/pemBm")
+    text = (
+        "📲 <b>Salone4D Application ဒေါင်းလုဒ်ရယူရန်</b>\n\n"
+        "အောက်ပါ Link ကို နှိပ်၍ Salone4D Application ကို အလွယ်တကူ ဒေါင်းလုဒ် ရယူနိုင်ပါသည် 👇\n\n"
+        f"🔗 <b>Download Link:</b> {app_url}\n"
+        "🌐 <b>Official Website:</b> www.salone4d.com"
+    )
+    kb = mk_kb([
+        [{"text": "📲 App ဒေါင်းလုဒ် ရယူရန်", "url": app_url}],
+        [{"text": "🏠 Main Menu သို့ ပြန်သွားရန်", "callback_data": "main_menu"}],
+    ])
+    tg_send(chat_id, text, reply_markup=kb)
+
+def handle_appguide(chat_id):
+    text = "📖 <b>၂။ 4D App သုံးနည်း</b>\nသိလိုသည့် အကြောင်းအရာကို ရွေးချယ်ပါ 👇"
+    tg_send(chat_id, text, reply_markup=APP_USAGE_KB)
+
+def handle_support(chat_id):
+    text = TEXTS["viber"]
+    tg_send(chat_id, text, reply_markup=SUPPORT_KB)
+
+def handle_reset(chat_id):
+    try:
+        import memory_manager
+        memory_manager.clear_user_history(chat_id)
+    except Exception:
+        pass
+    text = (
+        "🧹 <b>စကားပြော မှတ်တမ်းများကို ရှင်းလင်းလိုက်ပါပြီ။</b>\n\n"
+        "မင်္ဂလာပါခင်ဗျာ! အသစ်ပြန်လည် စတင်မေးမြန်းနိုင်ပါပြီ။"
+    )
+    tg_send(chat_id, text, reply_markup=MAIN_KB)
+
 def handle_cb(chat_id, msg_id, cb_id, data):
     tg_answer(cb_id)
     if data == "main_menu":
@@ -127,9 +161,12 @@ def handle_cb(chat_id, msg_id, cb_id, data):
 def handle_text(chat_id, text):
     if config.OPENROUTER_API_KEY:
         try:
-            import openrouter_client
-            reply = openrouter_client.get_ai_reply(text)
+            import openrouter_client, memory_manager
+            memory_manager.add_message(chat_id, "user", text)
+            history = memory_manager.get_user_history(chat_id)
+            reply = openrouter_client.get_ai_reply(text, history)
             if reply:
+                memory_manager.add_message(chat_id, "assistant", reply)
                 tg_send(chat_id, reply)
                 return
         except Exception as e:
@@ -143,6 +180,21 @@ def run_bot():
     import time
     last_id = 0
     logger.info("REST polling started (no python-telegram-bot)")
+
+    # Set Telegram bot menu commands
+    try:
+        req.post(f"https://api.telegram.org/bot{config.BOT_TOKEN}/setMyCommands", json={
+            "commands": [
+                {"command": "start", "description": "🏠 မူလ မနူး (Main Menu)"},
+                {"command": "applink", "description": "📲 4D App ဒေါင်းလုဒ် Link"},
+                {"command": "appguide", "description": "📖 4D App အသုံးပြုနည်း လမ်းညွှန်"},
+                {"command": "support", "description": "💬 ဆက်သွယ်ရန် / အကူအညီ"},
+                {"command": "reset", "description": "🧹 မှတ်တမ်းရှင်းလင်းရန် (New Chat)"},
+            ]
+        }, timeout=10)
+    except Exception as e:
+        logger.warning(f"setMyCommands failed: {e}")
+
     while True:
         try:
             r = req.post(f"https://api.telegram.org/bot{config.BOT_TOKEN}/getUpdates", 
@@ -163,7 +215,18 @@ def run_bot():
                     handle_cb(cb["message"]["chat"]["id"], cb["message"]["message_id"], cb["id"], cb["data"])
                 elif msg and msg.get("text"):
                     t = msg["text"].strip()
-                    if t.startswith("/"):
+                    cmd = t.split()[0].lower() if t.startswith("/") else ""
+                    if cmd == "/start":
+                        handle_start(msg["chat"]["id"])
+                    elif cmd == "/applink":
+                        handle_applink(msg["chat"]["id"])
+                    elif cmd == "/appguide":
+                        handle_appguide(msg["chat"]["id"])
+                    elif cmd == "/support":
+                        handle_support(msg["chat"]["id"])
+                    elif cmd in ("/reset", "/newchat"):
+                        handle_reset(msg["chat"]["id"])
+                    elif t.startswith("/"):
                         handle_start(msg["chat"]["id"])
                     else:
                         handle_text(msg["chat"]["id"], t)

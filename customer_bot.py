@@ -302,7 +302,6 @@ async def setup_bot_commands(application: Application):
         BotCommand("appguide", "📖 4D App အသုံးပြုနည်း လမ်းညွှန်"),
         BotCommand("support", "💬 ဆက်သွယ်ရန် / အကူအညီ"),
         BotCommand("reset", "🧹 မှတ်တမ်းရှင်းလင်းရန် (New Chat)"),
-        BotCommand("help", "❓ အကူအညီ ရယူရန်"),
     ]
     try:
         await application.bot.set_my_commands(commands)
@@ -330,7 +329,6 @@ def main():
 
     # Handlers
     application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("help", start_command))
     application.add_handler(CommandHandler("applink", applink_command))
     application.add_handler(CommandHandler("appguide", appguide_command))
     application.add_handler(CommandHandler("support", support_command))
