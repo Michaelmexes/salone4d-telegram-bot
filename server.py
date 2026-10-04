@@ -1,0 +1,298 @@
+"""
+SALONE 4D - Render Server (Webhook + Polling)
+===========================================
+Flask + python-telegram-bot + APScheduler
+"""
+import os, sys, json, threading, logging, asyncio
+from datetime import datetime
+
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
+from flask import Flask, request, jsonify
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+import pytz
+
+import config, bot, main as hot_pipeline, result_poster
+import requests as req
+
+os.makedirs("data", exist_ok=True)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler(), logging.FileHandler("data/server.log", encoding="utf-8")])
+logger = logging.getLogger(__name__)
+
+MYANMAR_TZ = pytz.timezone("Asia/Yangon")
+app = Flask(__name__)
+scheduler = BackgroundScheduler(timezone=MYANMAR_TZ)
+DRAW_WEEKDAYS = {2, 5, 6}
+LAST_POSTED_DRAW_FILE = "data/last_posted_draw.txt"
+
+
+# -------- Telegram REST helpers ----------
+def tg_send(chat_id, text, parse_mode="HTML", reply_markup=None):
+    payload = {"chat_id": chat_id, "text": text, "parse_mode": parse_mode, "disable_web_page_preview": True}
+    if reply_markup:
+        payload["reply_markup"] = json.dumps(reply_markup)
+    try:
+        r = req.post(f"https://api.telegram.org/bot{config.BOT_TOKEN}/sendMessage", json=payload, timeout=10)
+        return r.json().get("ok", False)
+    except Exception as e:
+        logger.error(f"tg_send: {e}")
+        return False
+
+def tg_edit(chat_id, msg_id, text, parse_mode="HTML", reply_markup=None):
+    payload = {"chat_id": chat_id, "message_id": msg_id, "text": text, "parse_mode": parse_mode}
+    if reply_markup:
+        payload["reply_markup"] = json.dumps(reply_markup)
+    try:
+        r = req.post(f"https://api.telegram.org/bot{config.BOT_TOKEN}/editMessageText", json=payload, timeout=10)
+        return r.json().get("ok", False)
+    except Exception as e:
+        logger.error(f"tg_edit: {e}")
+        return False
+
+def tg_answer(cb_id):
+    try:
+        req.post(f"https://api.telegram.org/bot{config.BOT_TOKEN}/answerCallbackQuery",
+                 json={"callback_query_id": cb_id}, timeout=5)
+    except Exception:
+        pass
+
+
+# -------- Keyboards ----------
+def mk_kb(rows):
+    return {"inline_keyboard": rows}
+
+MAIN_KB = mk_kb([
+    [{"text": "\u1041\u104d 4D App \u101c\u1031\u1038\u101e\u102d\u102f\u1004\u1039\u1015\u102b\u1037 (link)", "url": "https://t.ly/pemBm"}],
+    [{"text": "\u1042\u104d 4D App \u101e\u103c\u1014\u1032\u1038", "callback_data": "app_usage"}],
+    [{"text": "\u1043\u104d Viber (\u101e\u102d\u101c\u102d\u102b\u101b\u1032\u1019\u1032)", "callback_data": "viber"}],
+])
+APP_USAGE_KB = mk_kb([
+    [{"text": "\u1042\u104d\u1041 Register / Login", "callback_data": "reg"}],
+    [{"text": "\u1042\u104d\u1042 4D \u1011\u103c\u1038\u1014\u1032\u1038", "callback_data": "bet"}],
+    [{"text": "\u1042\u104d\u1043 \u1004\u1031\u101e\u102d\u102f\u1004\u1037/\u1004\u1031\u1011\u103c\u1010\u103c\u1014\u1032\u1038", "callback_data": "money"}],
+    [{"text": "\u1042\u104d\u1044 \u1011\u103c\u1038\u1011\u102c\u1010\u102c\u1055\u103c\u1004\u1039\u1004\u102d\u1033", "callback_data": "check"}],
+    [{"text": "\u25c0\ufe0f Main Menu \u101e\u102d\u102b \u1055\u103c\u1004\u1037\u101e\u102c\u101b\u1014\u1037", "callback_data": "main_menu"}],
+])
+SUB_KB = mk_kb([
+    [{"text": "\u25c0\ufe0f App \u101e\u103c\u1014\u1032\u1038\u101e\u102d\u102b \u1055\u103c\u1004\u1037\u101e\u102c\u101b\u1014\u1037", "callback_data": "app_usage"}],
+    [{"text": "\U0001f3e0 Main Menu \u101e\u102d\u102b \u1055\u103c\u1004\u1037\u101e\u102c\u101b\u1014\u1037", "callback_data": "main_menu"}],
+])
+SUPPORT_KB = mk_kb([
+    [{"text": "\U0001f4ac Viber \u1006\u1000\u1031\u101e\u1010\u103d\u101a\u1014\u1037", "url": "https://viber.click/959894169717"}],
+    [{"text": "\U0001f3e0 Main Menu \u101e\u102d\u102b \u1055\u103c\u1004\u1037\u101e\u102c\u101b\u1014\u1037", "callback_data": "main_menu"}],
+])
+
+
+# -------- Content ----------
+WELCOME = "🎰 *Salone4D ထီဝန်ဆောင်မှုမှ ကြိုဆိုပါသည်!*\n\nအောက်ပါ မနူးများမှတစ်ဆင့် ရွေးချယ်နိုင်ပါသည် 👇"
+MAIN_MSG = "🏠 *Main Menu* - ခလုတ်တစ်ခု ရွေးချယ်ပါ 👇"
+
+TEXTS = {
+    "reg": "📝 *၂.၁ Register လုပ်နည်း / login ဝင်နည်း*\n\n❶ *အကောင့်ဖွင့်နည်း (Register):*\n• App ကို ဖွင့်ပါ။\n• ဘယ်ဘက်အောက်ထောင့်ရှိ 'အကောင့်လုပ်မည်' သို့ ဝင်ပါ။\n• အမည်၊ ဖုန်းနံပါတ်၊ လျှို့ဝှက်နံပါတ် ဖြည့်သွင်း၍ 'ဖွင့်မည်' ကို နှိပ်ပါ\n\n❷ *Login ဝင်နည်း:*\n• အကောင့်ဖွင့်ထားသော ဖုန်းနံပါတ်နှင့် Password ရိုက်ထည့်၍ ဝင်ရောက်ပါ",
+    "bet": "🎰 *၂.၂ 4D ထိုးနည်း*\n\n• App ၏ အလယ်ဗဟိုရှိ *'Buy'* ခလုတ်ကို နှိပ်ပါ\n• အပေါ်တွင် ထိုးချင်သည့် ရက်စွဲနှင့် ထီအမျိုးအစား (4D / Sweep) ကို ရွေးချယ်ပါ\n• မိမိကြိုက်နှစ်သက်ရာ ဂဏန်းများ ရွေးချယ်ပြီး 'ထည့်မည်' ကို နှိပ်ပါ\n• ဂဏန်းအကုန်ရွေးပြီးပါက 'ရှေ့သို့' နှိပ်၍ အတည်ပြုပါ",
+        "money": "💳 *၂.၃ ငွေသွင်း/ငွေထုတ်နည်း*\n\n❶ *ငွေသွင်းနည်း:*\n• 'Cash' > 'ငွေသွင်း' သို့သွားပါ\n• KBZPay သို့မဟုတ် WaveMoney ဖြင့် အနည်းဆုံး ကျပ် ၁,၀၀၀ သွင်းနိုင်ပါသည် (နံနက် ၉ နာရီမှ ည ၉ နာရီအတွင်း)\n\n❷ *ငွေထုတ်နည်း:*\n• 'Cash' > 'ငွေထုတ်' သို့သွားပါ\n• ငွေလက်ခံမည့် ဖုန်းနံပါတ်နှင့် ပမာဏဖြည့်သွင်း၍ ထုတ်ယူနိုင်ပါသည်။",
+        "check": "🔍 *၂.၄ ထိုးထားတာပြန်စစ်နည်း*\n\n• ဝယ်ယူပြီးသော ထီလက်မှတ်များ နှင့် ထိုးထားသည့် ဂဏန်းများကို App ထဲရှိ *'Record'* သို့မဟုတ် *'History'* မနူးတွင် စိတ်ချစွာ ပြန်လည်စစ်ဆေးနိုင်ပါသည်။",
+        "viber": "📞 *ဆက်သွယ်ရန်*\n\n💬 Viber: +95 9 894 169 717\n✈️ Telegram: @salone4DAdmin\n",
+}
+FALLBACK = ("\u1000\u103c\u1031\u1010\u103d\u102c\u1021\u1000\u103b\u102d\u102f\u1040 \u1019\u103c\u1031\u1019\u103b\u1000\u103b \u1019\u102c\u1021\u1000\u103b \u1021\u102d\u102f\u101c\u1000\u1039\u1015\u102b\u1037 Main Menu \u1001\u101c\u1031\u1010\u1031\u1019\u103b\u102c\u1019\u103b\u102c\u1010\u103d\u1024\u1040 \u1021\u1000\u103b\u102d\u102f\u1010\u103d\u1010\u103d\u101b\u1031\u1019\u103b\u102c\u1000\u103c \u1001\u103c\u1014\u1032\u1038\u101b\u1031\u101b\u1014\u102d\u1031\u101a\u1031\u101e\u1010\u102c\u1038 \u1047\n\n\u1021\u101e\u1031\u1005\u102d\u102f\u101b\u103d\u102c \u1010\u102d\u102f\u1000\u103b\u101b\u102d\u102f\u1000\u103b\u1019\u1032\u1038\u101c\u102d\u102f\u101b\u102c Viber: +95 9 894 169 717")
+
+
+# -------- Handlers ----------
+def handle_start(chat_id):
+    tg_send(chat_id, WELCOME, reply_markup=MAIN_KB)
+
+def handle_cb(chat_id, msg_id, cb_id, data):
+    tg_answer(cb_id)
+    if data == "main_menu":
+        tg_edit(chat_id, msg_id, MAIN_MSG, reply_markup=MAIN_KB)
+    elif data == "app_usage":
+        tg_edit(chat_id, msg_id, MAIN_MSG, reply_markup=APP_USAGE_KB)
+    elif data == "viber":
+        tg_edit(chat_id, msg_id, TEXTS["viber"], reply_markup=SUPPORT_KB)
+    elif data in TEXTS:
+        tg_edit(chat_id, msg_id, TEXTS[data], reply_markup=SUB_KB)
+
+def handle_text(chat_id, text):
+    if config.OPENROUTER_API_KEY:
+        try:
+            import openrouter_client
+            reply = openrouter_client.get_ai_reply(text)
+            if reply:
+                tg_send(chat_id, reply)
+                return
+        except Exception as e:
+            logger.error(f"OpenRouter: {e}")
+    tg_send(chat_id, FALLBACK, reply_markup=MAIN_KB)
+
+
+# -------- Polling Bot Thread ----------
+def run_bot():
+    """Simple REST API polling - no python-telegram-bot dependency"""
+    import time
+    last_id = 0
+    logger.info("REST polling started (no python-telegram-bot)")
+    while True:
+        try:
+            r = req.post(f"https://api.telegram.org/bot{config.BOT_TOKEN}/getUpdates", 
+                json={"offset": last_id + 1, "timeout": 30, "allowed_updates": ["message", "callback_query"]},
+                timeout=35)
+            data = r.json()
+            if not data.get("ok"):
+                time.sleep(5)
+                continue
+            for upd in data.get("result", []):
+                uid = upd["update_id"]
+                if uid <= last_id:
+                    continue
+                last_id = uid
+                cb = upd.get("callback_query")
+                msg = upd.get("message")
+                if cb:
+                    handle_cb(cb["message"]["chat"]["id"], cb["message"]["message_id"], cb["id"], cb["data"])
+                elif msg and msg.get("text"):
+                    t = msg["text"].strip()
+                    if t.startswith("/"):
+                        handle_start(msg["chat"]["id"])
+                    else:
+                        handle_text(msg["chat"]["id"], t)
+        except Exception as e:
+            logger.error(f"Polling: {e}")
+            time.sleep(5)
+
+
+
+@app.route("/trigger/test", methods=["POST"])
+def trig_test():
+    """Test: manually run hot numbers pipeline and post to channel"""
+    def _test():
+        logger.info("Manual test trigger: running hot numbers pipeline...")
+        try:
+            result = hot_pipeline.run()
+            logger.info(f"Test pipeline result: {result}")
+        except Exception as e:
+            logger.error(f"Test failed: {e}", exc_info=True)
+    threading.Thread(target=_test, daemon=True).start()
+    return jsonify({"status": "ok", "job": "test"})
+
+# -------- Webhook ----------
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    try:
+        u = request.get_json(force=True)
+        if not u:
+            return "OK", 200
+        msg = u.get("message", {})
+        cb = u.get("callback_query", {})
+        if cb:
+            handle_cb(cb["message"]["chat"]["id"], cb["message"]["message_id"], cb["id"], cb["data"])
+        elif msg and msg.get("text"):
+            t = msg["text"].strip()
+            if t.startswith("/"):
+                handle_start(msg["chat"]["id"])
+            else:
+                handle_text(msg["chat"]["id"], t)
+    except Exception:
+        pass
+    return "OK", 200
+
+
+# -------- Scheduler ----------
+def _last_posted():
+    if os.path.exists(LAST_POSTED_DRAW_FILE):
+        try:
+            with open(LAST_POSTED_DRAW_FILE, "r", encoding="utf-8") as f:
+                return f.read().strip()
+        except Exception:
+            pass
+    return ""
+
+def _save_last(d):
+    try:
+        with open(LAST_POSTED_DRAW_FILE, "w", encoding="utf-8") as f:
+            f.write(d.strip())
+    except Exception:
+        pass
+
+def hot_job():
+    logger.info("Hot numbers job triggered")
+    try:
+        if not config.POST_ON_DRAW_DAYS_ONLY or datetime.now().weekday() in DRAW_WEEKDAYS:
+            result = hot_pipeline.run()
+            if result:
+                logger.info("Hot numbers posted successfully")
+            else:
+                logger.warning("Hot numbers pipeline returned False")
+    except Exception as e:
+        logger.error(f"Hot numbers job failed: {e}", exc_info=True)
+
+def draw_job():
+    try:
+        if datetime.now(MYANMAR_TZ).weekday() not in DRAW_WEEKDAYS:
+            return
+        now = datetime.now(MYANMAR_TZ).strftime("%H:%M")
+        if not (config.RESULT_CHECK_START_TIME <= now <= config.RESULT_CHECK_END_TIME):
+            return
+        data = result_poster.fetch_latest_result()
+        if not data or not data.get("prizes", {}).get("1st"):
+            return
+        dn = data.get("draw_no_str", "")
+        if dn and dn != _last_posted():
+            msg = result_poster.build_result_post(data)
+            if bot.send_message(msg):
+                _save_last(dn)
+                logger.info(f"Draw {dn} posted!")
+                try:
+                    import scraper; scraper.update_latest()
+                except Exception:
+                    pass
+    except Exception as e:
+        logger.error(f"Draw job failed: {e}", exc_info=True)
+
+
+@app.route("/")
+def index():
+    return jsonify({"status": "running", "bot": f"@{config.CHANNEL_ID}",
+        "time": datetime.now(MYANMAR_TZ).isoformat(),
+        "scheduled_posts": {"hot_numbers": config.POST_TIME,
+            "draw_check": f"{config.RESULT_CHECK_INTERVAL_MINS} mins (5:45-7PM Wed/Sat/Sun)"}})
+
+@app.route("/health")
+def health():
+    return "OK", 200
+
+@app.route("/trigger/hot", methods=["POST"])
+def trig_hot():
+    threading.Thread(target=hot_job, daemon=True).start()
+    return jsonify({"status": "ok"})
+
+@app.route("/trigger/result", methods=["POST"])
+def trig_draw():
+    threading.Thread(target=draw_job, daemon=True).start()
+    return jsonify({"status": "ok"})
+
+
+# ---- Startup: run at module level (gunicorn imports this) ----
+logger.info("Starting SALONE 4D background services...")
+try:
+    h, m = config.POST_TIME.split(":")
+    scheduler.add_job(hot_job, CronTrigger(hour=int(h), minute=int(m), timezone=MYANMAR_TZ), id="h", replace_existing=True)
+    scheduler.add_job(draw_job, CronTrigger(minute=f"*/{config.RESULT_CHECK_INTERVAL_MINS}", hour="17-19", timezone=MYANMAR_TZ), id="d", replace_existing=True)
+    scheduler.start()
+    logger.info("Scheduler started!")
+except Exception as e:
+    logger.error(f"Scheduler: {e}")
+
+t = threading.Thread(target=run_bot, daemon=True)
+t.start()
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    logger.info(f"Flask on port {port}")
+    app.run(host="0.0.0.0", port=port, debug=False)
