@@ -332,6 +332,7 @@ def index():
             "draw_check": f"{config.RESULT_CHECK_INTERVAL_MINS} mins (5:45-7PM Wed/Sat/Sun)"}})
 
 @app.route("/health")
+@app.route("/ping")
 def health():
     return "OK", 200
 
