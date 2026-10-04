@@ -59,7 +59,7 @@ def build_post(hot_numbers: list[dict], dt: datetime = None) -> str:
     # ── Header ──
     box_header = (
         """<pre>╔═══════════════════╗
-║   🎯   SALONE4D   🎯  ║
+║   🎯   SALONE4D   🎯  ║
 ╚═══════════════════╝</pre>"""
     )
 

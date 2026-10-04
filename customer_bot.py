@@ -243,11 +243,7 @@ async def handle_user_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.chat.send_action(action=ChatAction.TYPING)
 
     # Send temporary thinking notification
-    thinking_msg = (
-        "🤖 ခဏစောင့်ပေးပါ... AI မှ တွေးတောဖြေကြားပေးနေပါသည်..."
-        if lang == "my"
-        else "🤖 Please wait... AI assistant is replying..."
-    )
+    thinking_msg = "🤖 ခဏစောင့်ပေးပါ... AI မှ အဖြေထုတ်ပေးနေပါသည်..."
     sent_msg = await update.message.reply_text(thinking_msg)
 
     # Save incoming user message to memory
