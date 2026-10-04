@@ -61,9 +61,10 @@ def get_ai_reply(user_message: str, conversation_history: list = None) -> str:
         config,
         "OPENROUTER_MODELS",
         [
-            "deepseek/deepseek-v4-flash",
-            "deepseek/deepseek-v4.1-flash",
-            "deepseek/deepseek-chat",
+            "qwen/qwen3.8-27b:free",
+            "google/gemma-4-31b-it:free",
+            "google/gemma-4-26b-a4b-it:free",
+            "nvidia/nemotron-3-super-120b-a12b:free",
             "openrouter/free"
         ]
     )
