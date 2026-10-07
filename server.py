@@ -179,11 +179,16 @@ def run_bot():
     """Simple REST API polling - no python-telegram-bot dependency"""
     import time
     last_id = 0
+    token = getattr(config, "BOT_TOKEN", None) or os.getenv("BOT_TOKEN", "")
+    if not token:
+        logger.error("❌ BOT_TOKEN is missing! Please configure BOT_TOKEN in Render Environment variables.")
+        return
+
     logger.info("REST polling started (no python-telegram-bot)")
 
     # Set Telegram bot menu commands
     try:
-        req.post(f"https://api.telegram.org/bot{config.BOT_TOKEN}/setMyCommands", json={
+        req.post(f"https://api.telegram.org/bot{token}/setMyCommands", json={
             "commands": [
                 {"command": "start", "description": "🏠 ပင်မ မီနူး (Main Menu)"},
                 {"command": "applink", "description": "📲 4D App ဒေါင်းလုဒ် Link"},
@@ -197,7 +202,7 @@ def run_bot():
 
     while True:
         try:
-            r = req.post(f"https://api.telegram.org/bot{config.BOT_TOKEN}/getUpdates", 
+            r = req.post(f"https://api.telegram.org/bot{token}/getUpdates", 
                 json={"offset": last_id + 1, "timeout": 30, "allowed_updates": ["message", "callback_query"]},
                 timeout=35)
             data = r.json()

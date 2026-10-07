@@ -23,6 +23,8 @@ _load_dotenv()
 # SALONE 4D - Configuration File
 # ==========================================
 
+BOT_TOKEN = os.getenv("BOT_TOKEN", "")                  # Telegram Bot token (from .env or environment)
+
 # ==========================================
 # Telegram Channel Configuration (Environment)
 # ==========================================
