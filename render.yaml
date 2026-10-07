@@ -14,3 +14,7 @@ services:
         value: "@mexes30salone"
       - key: RUN_MODE
         value: "all"
+      - key: HOT_POST_TIME
+        value: "10:00"
+      - key: RESULT_POST_START_TIME
+        value: "17:45"

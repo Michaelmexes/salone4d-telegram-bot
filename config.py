@@ -104,16 +104,19 @@ TOP_N = 5                               # ထုတ်ပေးမည့် hot 
 # ==========================================
 # Scheduler Settings
 # ==========================================
-# နေ့တိုင်း Hot numbers post လုပ်မည့် အချိန် (24hr format)
-# မနက် (၁၀:၀၀) နာရီတွင် အလိုအလျောက် Post တင်မည် (Render Environment မှ ပြောင်းလဲနိုင်သည်)
-POST_TIME = os.getenv("POST_TIME", "10:00")  # နေ့တိုင်း post လုပ်မည့် အချိန် (HH:MM, 24hr format)
+
+# ၁။ Hot Numbers Schedule (ထီဂဏန်း ခန့်မှန်းချက် တင်မည့်အချိန်)
+# နေ့တိုင်း မနက် (၁၀:၀၀) နာရီတွင် အလိုအလျောက် Post တင်မည် (Render: HOT_POST_TIME သို့မဟုတ် POST_TIME)
+HOT_POST_TIME = os.getenv("HOT_POST_TIME", os.getenv("POST_TIME", "10:00"))
+POST_TIME = HOT_POST_TIME               # Backwards compatibility
 POST_ON_DRAW_DAYS_ONLY = False          # True = ဆွဲတဲ့နေ့တွေမှာပဲ post / False = နေ့တိုင်း post
 
-# Wed, Sat, Sun များတွင် 4D Result အသစ် စတင်စစ်ဆေးမည့် အချိန်သတ်မှတ်ချက် (မြန်မာစံတော်ချိန်)
-# 5:45 PM မှ စတင်စစ်ဆေးမည်
-RESULT_CHECK_START_TIME = "17:45"       # မြန်မာစံတော်ချိန် ညနေ ၅:၄၅ PM
-RESULT_CHECK_END_TIME   = "19:00"       # ညနေ ၇:၀၀ PM အထိ မထွက်သေးပါက စစ်ဆေးမည်
-RESULT_CHECK_INTERVAL_MINS = 2          # ၂ မိနစ်တစ်ကြိမ် စစ်ဆေးမည်
+# ၂။ Official Draw Result Schedule (ထီပေါက်စဉ် စစ်ဆေးပြီး တင်မည့်အချိန်)
+# Singapore Pools 4D ပေါက်စဉ်သည် Wed, Sat, Sun ညနေ ၅:၄၅ မှ ၇:၀၀ အတွင်း အသစ်ထွက်လာသည်နှင့် တင်ပေးသည်
+RESULT_POST_START_TIME = os.getenv("RESULT_POST_START_TIME", os.getenv("RESULT_CHECK_START_TIME", "17:45"))
+RESULT_CHECK_START_TIME = RESULT_POST_START_TIME       # စတင်စစ်ဆေးမည့်အချိန် (မြန်မာစံတော်ချိန် ညနေ ၅:၄၅ PM)
+RESULT_CHECK_END_TIME   = os.getenv("RESULT_CHECK_END_TIME", "19:00")  # နောက်ဆုံးစစ်ဆေးမည့်အချိန် (ညနေ ၇:၀၀ PM)
+RESULT_CHECK_INTERVAL_MINS = int(os.getenv("RESULT_CHECK_INTERVAL_MINS", "2"))  # ၂ မိနစ်တစ်ကြိမ် စစ်ဆေးမည်
 
 # ==========================================
 # Myanmar Locale
