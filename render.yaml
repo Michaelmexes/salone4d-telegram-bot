@@ -10,8 +10,6 @@ services:
         value: 3.12.0
       - key: ENVIRONMENT
         value: "staging"
-      - key: CHANNEL_ID
-        value: "@mexes30salone"
       - key: RUN_MODE
         value: "all"
       - key: HOT_POST_TIME
