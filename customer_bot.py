@@ -297,7 +297,7 @@ async def handle_user_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def setup_bot_commands(application: Application):
     """Register menu commands with Telegram so they appear when typing '/'."""
     commands = [
-        BotCommand("start", "🏠 မူလ မနူး (Main Menu)"),
+        BotCommand("start", "🏠 ပင်မ မီနူး (Main Menu)"),
         BotCommand("applink", "📲 4D App ဒေါင်းလုဒ် Link"),
         BotCommand("appguide", "📖 4D App အသုံးပြုနည်း လမ်းညွှန်"),
         BotCommand("support", "💬 ဆက်သွယ်ရန် / အကူအညီ"),

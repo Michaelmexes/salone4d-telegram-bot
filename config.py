@@ -23,8 +23,28 @@ _load_dotenv()
 # SALONE 4D - Configuration File
 # ==========================================
 
-BOT_TOKEN = os.getenv("BOT_TOKEN", "")                  # Telegram Bot token (from .env or environment)
-CHANNEL_ID = os.getenv("CHANNEL_ID", "@mexes30salone")  # Target Telegram Channel
+# ==========================================
+# Telegram Channel Configuration (Environment)
+# ==========================================
+# Production သို့မဟုတ် Staging ပြောင်းရန် ဤနေရာတွင် 'production' (သို့) 'staging' ရွေးပါ:
+# - "production" => @Salone4dOfficialBot
+# - "staging"    => @mexes30salone
+ENVIRONMENT = os.getenv("ENVIRONMENT", "staging").lower()
+
+CHANNELS = {
+    "production": "@Salone4dOfficialBot",
+    "staging": "@mexes30salone",
+}
+
+# လက်ရှိ အသုံးပြုမည့် Channel ID
+if os.getenv("ENVIRONMENT"):
+    CHANNEL_ID = CHANNELS.get(os.getenv("ENVIRONMENT").lower(), "@mexes30salone")
+elif os.getenv("CHANNEL_ID"):
+    CHANNEL_ID = os.getenv("CHANNEL_ID")
+else:
+    CHANNEL_ID = CHANNELS.get(ENVIRONMENT, "@mexes30salone")
+
+TELEGRAM_CHANNEL = CHANNEL_ID
 
 # Web Service Port for Render / Cloud hosting
 PORT = int(os.getenv("PORT", "10000"))
@@ -60,7 +80,7 @@ AI_SYSTEM_PROMPT = (
     "     2.1 Register / Login ဝင်နည်း: အကောင့်လုပ်မည် သို့သွားပြီး နာမည်၊ ဖုန်း၊ password ဖြည့်သွင်း၍ ဖွင့်ပါ။\n"
     "     2.2 4D ထိုးနည်း: App ရှိ 'Buy' ကိုနှိပ်ပါ၊ ရက်စွဲနှင့် အမျိုးအစား (4D/Sweep) ရွေးချယ်ပြီး မိမိကြိုက်သောဂဏန်းများရွေးပါ။\n"
     "     2.3 ငွေသွင်း/ငွေထုတ်နည်း: 'Cash' > 'ငွေသွင်း'/'ငွေထုတ်' သို့သွားပါ။ KBZPay, WaveMoney ဖြင့် အနည်းဆုံး ကျပ် ၁,၀၀၀ သွင်း/ထုတ်နိုင်ပါသည်။\n"
-    "     2.4 ထိုးထားတာပြန်စစ်နည်း: 'Record' သို့မဟုတ် 'History' မနူးတွင် ထိုးထားသည့်လက်မှတ်များကို ပြန်လည်စစ်ဆေးနိုင်ပါသည်။\n"
+    "     2.4 ထိုးထားတာပြန်စစ်နည်း: 'Record' သို့မဟုတ် 'History' မီနူးတွင် ထိုးထားသည့်လက်မှတ်များကို ပြန်လည်စစ်ဆေးနိုင်ပါသည်။\n"
     "  3. ဆက်သွယ်ရန် / Viber: +95 9 894 169 717 (https://viber.click/959894169717)\n"
     "Rules:\n"
     "  - အရေးကြီးသည်: အမြဲတမ်း သဘာဝကျပြီး ယဉ်ကျေးပျူငှာသော မြန်မာဘာသာစကားဖြင့်သာ ဖြေကြားပေးရပါမည်။ အင်္ဂလိပ်လို လုံးဝမဖြေရပါ။ (STRICT: Reply ONLY in Burmese/Myanmar language. Never output English).\n"
@@ -83,7 +103,8 @@ TOP_N = 5                               # ထုတ်ပေးမည့် hot 
 # Scheduler Settings
 # ==========================================
 # နေ့တိုင်း Hot numbers post လုပ်မည့် အချိန် (24hr format)
-POST_TIME = "18:00"                     # နေ့တိုင်း post လုပ်မည့် အချိန် (HH:MM)
+# မနက် (၁၀:၀၀) နာရီတွင် အလိုအလျောက် Post တင်မည်
+POST_TIME = "10:00"                     # နေ့တိုင်း မနက် ၁၀:၀၀ နာရီ post လုပ်မည့် အချိန် (HH:MM)
 POST_ON_DRAW_DAYS_ONLY = False          # True = ဆွဲတဲ့နေ့တွေမှာပဲ post / False = နေ့တိုင်း post
 
 # Wed, Sat, Sun များတွင် 4D Result အသစ် စတင်စစ်ဆေးမည့် အချိန်သတ်မှတ်ချက် (မြန်မာစံတော်ချိန်)
