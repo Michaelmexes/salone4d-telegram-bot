@@ -105,8 +105,8 @@ TOP_N = 5                               # ထုတ်ပေးမည့် hot 
 # Scheduler Settings
 # ==========================================
 # နေ့တိုင်း Hot numbers post လုပ်မည့် အချိန် (24hr format)
-# မနက် (၁၀:၀၀) နာရီတွင် အလိုအလျောက် Post တင်မည်
-POST_TIME = "10:00"                     # နေ့တိုင်း မနက် ၁၀:၀၀ နာရီ post လုပ်မည့် အချိန် (HH:MM)
+# မနက် (၁၀:၀၀) နာရီတွင် အလိုအလျောက် Post တင်မည် (Render Environment မှ ပြောင်းလဲနိုင်သည်)
+POST_TIME = os.getenv("POST_TIME", "10:00")  # နေ့တိုင်း post လုပ်မည့် အချိန် (HH:MM, 24hr format)
 POST_ON_DRAW_DAYS_ONLY = False          # True = ဆွဲတဲ့နေ့တွေမှာပဲ post / False = နေ့တိုင်း post
 
 # Wed, Sat, Sun များတွင် 4D Result အသစ် စတင်စစ်ဆေးမည့် အချိန်သတ်မှတ်ချက် (မြန်မာစံတော်ချိန်)
