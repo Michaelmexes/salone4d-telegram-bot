@@ -27,12 +27,12 @@ _load_dotenv()
 # Telegram Channel Configuration (Environment)
 # ==========================================
 # Production သို့မဟုတ် Staging ပြောင်းရန် ဤနေရာတွင် 'production' (သို့) 'staging' ရွေးပါ:
-# - "production" => @Salone4dOfficialBot
+# - "production" => @salone4d
 # - "staging"    => @mexes30salone
 ENVIRONMENT = os.getenv("ENVIRONMENT", "staging").lower()
 
 CHANNELS = {
-    "production": "@Salone4dOfficialBot",
+    "production": "@salone4d",
     "staging": "@mexes30salone",
 }
 
