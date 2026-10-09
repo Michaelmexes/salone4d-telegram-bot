@@ -29,22 +29,27 @@ BOT_TOKEN = os.getenv("BOT_TOKEN", "")                  # Telegram Bot token (fr
 # Telegram Channel Configuration (Environment)
 # ==========================================
 # Production သို့မဟုတ် Staging ပြောင်းရန် ဤနေရာတွင် 'production' (သို့) 'staging' ရွေးပါ:
-# - "production" => @salone4d
+# - "production" => @Salone4dOfficial
 # - "staging"    => @mexes30salone
-ENVIRONMENT = os.getenv("ENVIRONMENT", "staging").lower()
+ENVIRONMENT = os.getenv("ENVIRONMENT", "production").lower().strip()
 
 CHANNELS = {
-    "production": "@salone4d",
+    "production": "@Salone4dOfficial",
     "staging": "@mexes30salone",
 }
 
 # လက်ရှိ အသုံးပြုမည့် Channel ID
+# ENVIRONMENT သတ်မှတ်ထားပါက ၎င်းအတိုင်း တိုက်ရိုက်ယူမည်
 if os.getenv("ENVIRONMENT"):
-    CHANNEL_ID = CHANNELS.get(os.getenv("ENVIRONMENT").lower(), "@mexes30salone")
+    CHANNEL_ID = CHANNELS.get(os.getenv("ENVIRONMENT").lower().strip(), "@Salone4dOfficial")
 elif os.getenv("CHANNEL_ID"):
-    CHANNEL_ID = os.getenv("CHANNEL_ID")
+    CHANNEL_ID = os.getenv("CHANNEL_ID").strip()
 else:
-    CHANNEL_ID = CHANNELS.get(ENVIRONMENT, "@mexes30salone")
+    CHANNEL_ID = CHANNELS.get(ENVIRONMENT, "@Salone4dOfficial")
+
+# Format channel handle
+if not CHANNEL_ID.startswith("@"):
+    CHANNEL_ID = f"@{CHANNEL_ID}"
 
 TELEGRAM_CHANNEL = CHANNEL_ID
 

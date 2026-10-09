@@ -331,7 +331,7 @@ def draw_job():
 
 @app.route("/")
 def index():
-    return jsonify({"status": "running", "bot": f"@{config.CHANNEL_ID}",
+    return jsonify({"status": "running", "bot": config.CHANNEL_ID,
         "time": datetime.now(MYANMAR_TZ).isoformat(),
         "scheduled_posts": {"hot_numbers": config.POST_TIME,
             "draw_check": f"{config.RESULT_CHECK_INTERVAL_MINS} mins (5:45-7PM Wed/Sat/Sun)"}})
