@@ -145,7 +145,7 @@ def build_result_post(result_data: dict) -> str:
         "────────────────────\n"
         "Singapore Pools 4D Official Result\n"
         "🍀 ကံထူးရှင်များအားလုံး ဂုဏ်ယူပါသည်! 🍀\n"
-        f"{getattr(config, 'TELEGRAM_CHANNEL', '@mexes30salone')}"
+        f"{getattr(config, 'CHANNEL_ID', '@Salone4dOfficial')}"
     )
     return post
 

@@ -75,7 +75,7 @@ COMPANY_NAME_MY = "Salone4D ထီဝန်ဆောင်မှု"
 SUPPORT_PHONE = "+95 9 894 169 717"
 SUPPORT_VIBER = "+95 9 894 169 717"
 APP_LINK = "https://t.ly/pemBm"
-TELEGRAM_CHANNEL = os.getenv("TELEGRAM_CHANNEL", "@mexes30salone")
+TELEGRAM_CHANNEL = CHANNEL_ID
 ADMIN_TELEGRAM = "@salone4DAdmin"
 
 # AI Assistant System Prompt
