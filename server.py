@@ -307,28 +307,11 @@ def hot_job():
 
 def draw_job():
     try:
-        if datetime.now(MYANMAR_TZ).weekday() not in DRAW_WEEKDAYS:
-            return
-        now = datetime.now(MYANMAR_TZ).strftime("%H:%M")
-        if not (config.RESULT_CHECK_START_TIME <= now <= config.RESULT_CHECK_END_TIME):
-            return
-        data = result_poster.fetch_latest_result()
-        if not data or not data.get("prizes", {}).get("1st"):
-            return
-        dn = data.get("draw_no_str", "")
-        if dn and dn != _last_posted():
-            msg = result_poster.build_result_post(data)
-            if bot.send_message(msg):
-                _save_last(dn)
-                logger.info(f"Draw {dn} posted!")
-                try:
-                    import scraper; scraper.update_latest()
-                except Exception:
-                    pass
-                # Result ထွက်ပြီး ၅ မိနစ် (300 စက္ကန့်) အကြာတွင် Lucky Winners post စစ်ဆေးတင်မည်
-                schedule_winner_check(data, delay_seconds=300)
+        import scheduler
+        scheduler.check_and_post_draw_result()
     except Exception as e:
         logger.error(f"Draw job failed: {e}", exc_info=True)
+
 
 
 def schedule_winner_check(result_data: dict, delay_seconds: int = 300):

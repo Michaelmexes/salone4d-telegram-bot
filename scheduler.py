@@ -41,6 +41,7 @@ logger = logging.getLogger(__name__)
 
 DRAW_WEEKDAYS = {2, 5, 6}   # Wednesday, Saturday, Sunday
 LAST_POSTED_DRAW_FILE = "data/last_posted_draw.txt"
+_POSTED_DRAWS_MEMORY = set()
 
 
 def get_last_posted_draw() -> str:
@@ -48,7 +49,10 @@ def get_last_posted_draw() -> str:
     if os.path.exists(LAST_POSTED_DRAW_FILE):
         try:
             with open(LAST_POSTED_DRAW_FILE, 'r', encoding='utf-8') as f:
-                return f.read().strip()
+                val = f.read().strip()
+                if val:
+                    _POSTED_DRAWS_MEMORY.add(val)
+                return val
         except Exception:
             pass
     return ""
@@ -56,16 +60,24 @@ def get_last_posted_draw() -> str:
 
 def set_last_posted_draw(draw_no_str: str):
     """Post တင်ပြီးသော Draw အမှတ်အသားကို မှတ်သားသည်"""
+    val = draw_no_str.strip()
+    _POSTED_DRAWS_MEMORY.add(val)
     try:
         with open(LAST_POSTED_DRAW_FILE, 'w', encoding='utf-8') as f:
-            f.write(draw_no_str.strip())
+            f.write(val)
     except Exception as e:
         logger.warning(f"Error saving last posted draw: {e}")
 
 
 def is_within_result_check_window() -> bool:
     """လက်ရှိအချိန်သည် မြန်မာစံတော်ချိန် ညနေ ၅:၄၅ PM မှ ၇:၀၀ PM အတွင်း ဟုတ်မဟုတ် စစ်ဆေးသည်"""
-    now = datetime.now()
+    try:
+        import pytz
+        mm_tz = pytz.timezone("Asia/Yangon")
+        now = datetime.now(mm_tz)
+    except Exception:
+        now = datetime.now()
+
     now_time_str = now.strftime("%H:%M")
     start_time = getattr(config, 'RESULT_CHECK_START_TIME', '17:45')
     end_time = getattr(config, 'RESULT_CHECK_END_TIME', '19:00')
@@ -74,7 +86,14 @@ def is_within_result_check_window() -> bool:
 
 def check_and_post_draw_result():
     """Singapore Pools Draw Result အသစ်ထွက်မထွက် စစ်ဆေးပြီး ထွက်ပါက Telegram သို့ ချက်ချင်း တင်သည်"""
-    today_weekday = datetime.now().weekday()
+    try:
+        import pytz
+        mm_tz = pytz.timezone("Asia/Yangon")
+        now_dt = datetime.now(mm_tz)
+    except Exception:
+        now_dt = datetime.now()
+
+    today_weekday = now_dt.weekday()
     if today_weekday not in DRAW_WEEKDAYS:
         return
 
@@ -87,7 +106,7 @@ def check_and_post_draw_result():
     if not result_data:
         return
 
-    current_draw_no = result_data.get('draw_no_str', '')
+    current_draw_no = result_data.get('draw_no_str', '').strip()
     prizes = result_data.get('prizes', {})
     
     # 1st Prize ထွက်ပြီးမှသာ တရားဝင်ပြီးပြည့်စုံသော ရလဒ်ဖြစ်သည်
@@ -96,12 +115,14 @@ def check_and_post_draw_result():
         return
 
     last_posted = get_last_posted_draw()
-    if current_draw_no and current_draw_no != last_posted:
+    if current_draw_no and current_draw_no != last_posted and current_draw_no not in _POSTED_DRAWS_MEMORY:
         logger.info(f"🎉 New draw result found: {current_draw_no}! Formatting and sending to Telegram...")
+        # Mark as posted immediately to prevent race conditions from concurrent triggers
+        set_last_posted_draw(current_draw_no)
+
         message = result_poster.build_result_post(result_data)
         success = bot.send_message(message)
         if success:
-            set_last_posted_draw(current_draw_no)
             logger.info(f"✅ Official 4D Result for {current_draw_no} posted successfully to Telegram!")
             # ဒေတာအသစ်ကိုပါ database CSV ထဲ ထပ်မံဖြည့်စွက်သိမ်းဆည်း
             try:
@@ -112,8 +133,11 @@ def check_and_post_draw_result():
 
             # Result ထွက်ပြီး ၅ မိနစ် (300 စက္ကန့်) အကြာတွင် Lucky Winners post စစ်ဆေးတင်မည်
             schedule_winner_check(result_data, delay_seconds=300)
+        else:
+            logger.error(f"❌ Failed to send Official 4D Result for {current_draw_no}.")
     else:
         logger.info(f"ℹ️ Latest draw ({current_draw_no}) is already posted.")
+
 
 
 def schedule_winner_check(result_data: dict, delay_seconds: int = 300):
