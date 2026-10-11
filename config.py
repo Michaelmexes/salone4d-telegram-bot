@@ -38,6 +38,11 @@ CHANNELS = {
     "staging": "@mexes30salone",
 }
 
+SIGNATURES = {
+    "production": "@Salone4dOfficial",
+    "staging": "@mexes30salone",
+}
+
 # လက်ရှိ အသုံးပြုမည့် Channel ID
 # ENVIRONMENT သတ်မှတ်ထားပါက ၎င်းအတိုင်း တိုက်ရိုက်ယူမည်
 if os.getenv("ENVIRONMENT"):
@@ -45,13 +50,16 @@ if os.getenv("ENVIRONMENT"):
 elif os.getenv("CHANNEL_ID"):
     CHANNEL_ID = os.getenv("CHANNEL_ID").strip()
 else:
-    CHANNEL_ID = CHANNELS.get(ENVIRONMENT, "@Salone4dOfficial")
+    CHANNEL_ID = CHANNELS.get(ENVIRONMENT, "@salone4d")
 
 # Format channel handle
 if not CHANNEL_ID.startswith("@"):
     CHANNEL_ID = f"@{CHANNEL_ID}"
 
 TELEGRAM_CHANNEL = CHANNEL_ID
+
+# Post Footer တွင် ဖော်ပြမည့် Signature (production တွင် @Salone4dOfficial / staging တွင် @mexes30salone)
+CHANNEL_SIGNATURE = SIGNATURES.get(os.getenv("ENVIRONMENT", ENVIRONMENT).lower().strip(), "@Salone4dOfficial")
 
 # Web Service Port for Render / Cloud hosting
 PORT = int(os.getenv("PORT", "10000"))
