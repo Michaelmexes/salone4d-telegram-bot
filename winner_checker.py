@@ -84,29 +84,35 @@ def save_posted_lucky_numbers(hot_numbers: list, dt: datetime = None):
     if not updated:
         records.append(entry)
 
-    # Keep latest 30 days
-    records = records[-30:]
+    # Keep only 1 week (7 days) of records
+    records = records[-7:]
 
     try:
         with open(LUCKY_NUMBERS_FILE, "w", encoding="utf-8") as f:
             json.dump(records, f, ensure_ascii=False, indent=2)
-        logger.info(f"✅ Saved {len(extracted_nums)} posted lucky numbers for {entry['date']}")
+        logger.info(f"✅ Saved {len(extracted_nums)} posted lucky numbers for {entry['date']} (Keeping 1 week/7 days)")
     except Exception as e:
         logger.error(f"❌ Failed to save posted lucky numbers: {e}")
 
 
 def get_latest_posted_lucky_numbers() -> dict:
     """နောက်ဆုံး Post တင်ထားသော Lucky numbers စာရင်းကို ရယူသည်"""
+    records = get_all_posted_lucky_numbers()
+    if records:
+        return records[-1]
+    return None
+
+
+def get_all_posted_lucky_numbers() -> list[dict]:
+    """သိမ်းဆည်းထားသော Lucky numbers စာရင်းအားလုံးကို ဖတ်သည်"""
     if not os.path.exists(LUCKY_NUMBERS_FILE):
-        return None
+        return []
     try:
         with open(LUCKY_NUMBERS_FILE, "r", encoding="utf-8") as f:
-            records = json.load(f)
-            if records:
-                return records[-1]
+            return json.load(f)
     except Exception as e:
         logger.error(f"Error reading lucky numbers file: {e}")
-    return None
+        return []
 
 
 def check_winners(result_data: dict, lucky_numbers: list) -> list:
@@ -153,7 +159,7 @@ def check_winners(result_data: dict, lucky_numbers: list) -> list:
     return matches
 
 
-def build_winner_post(result_data: dict, matches: list, lucky_record: dict = None) -> str:
+def build_winner_post(result_data: dict, matches: list, matched_days_str: str = "ပြီးခဲ့တဲ့ရက်") -> str:
     """
     တောင်းဆိုထားသော ပုံစံအတိုင်း Lucky Winners Announcement Post ဖန်တီးသည်
     """
@@ -164,10 +170,6 @@ def build_winner_post(result_data: dict, matches: list, lucky_record: dict = Non
     draw_no = result_data.get("draw_no_str", "Draw")
     draw_date_str = dt.strftime("%d %b %Y")  # e.g. "10 Oct 2026"
     draw_day_name = config.MYANMAR_DAYS.get(dt.strftime("%A"), dt.strftime("%A"))
-
-    last_day_str = "ပြီးခဲ့တဲ့ရက်"
-    if lucky_record and lucky_record.get("day_name"):
-        last_day_str = f"ပြီးခဲ့တဲ့ {lucky_record.get('day_name')}"
 
     matched_count_mm = to_myanmar_digits(str(len(matches)))
 
@@ -186,7 +188,7 @@ def build_winner_post(result_data: dict, matches: list, lucky_record: dict = Non
         "🔴 WIN! 🎯 SALONE4D LUCKY WINNERS 🎯\n"
         f"📅 {draw_no} ({draw_date_str})\n\n"
         "ပေါက်တယ်ဆိုမှ တကယ် ပေါက်တာပါ! 💥\n"
-        f"{last_day_str}မှာ ထုတ်ပြန်ပေးခဲ့တဲ့ Lucky Numbers တွေထဲကမှ "
+        f"{matched_days_str}မှာ ထုတ်ပြန်ပေးခဲ့တဲ့ Lucky Numbers တွေထဲကမှ "
         f"{draw_day_name} Singapore Pools Draw မှာ ({matched_count_mm}) စုံ ကွက်တိ ဝင်သွားခဲ့ပါပြီ! ✨\n\n"
         f"{prizes_block}\n\n"
         "───────────────────────\n"
@@ -220,7 +222,8 @@ def set_last_posted_winner_draw(draw_no_str: str):
 
 def check_and_build_winner_post(result_data: dict) -> str:
     """
-    နောက်ဆုံး Result နှင့် Lucky numbers များကို စစ်ဆေး၍ Post စာသား ဖန်တီးပေးသည်
+    Singapore Pools Draw Result နှင့် လွန်ခဲ့သော ၁ ပတ်စာ (၇ ရက်အတွင်း) တင်ခဲ့သော Lucky Numbers များကို စစ်ဆေး၍
+    ပေါက်ဂဏန်းရှိပါက Post စာသား ဖန်တီးပေးသည်။
     (ပေါက်ဂဏန်း မရှိပါက (သို့မဟုတ်) ထို Draw အတွက် post တင်ပြီးသားဖြစ်ပါက None ပြန်သည်)
     """
     draw_no = result_data.get("draw_no_str", "")
@@ -229,19 +232,60 @@ def check_and_build_winner_post(result_data: dict) -> str:
         logger.info(f"ℹ️ Lucky winners for {draw_no} already posted previously. Skipping duplicate post.")
         return None
 
-    lucky_rec = get_latest_posted_lucky_numbers()
-    if not lucky_rec or not lucky_rec.get("numbers"):
+    all_records = get_all_posted_lucky_numbers()
+    if not all_records:
         logger.info("No saved lucky numbers found to match.")
         return None
 
-    matches = check_winners(result_data, lucky_rec.get("numbers", []))
-    if not matches:
-        logger.info(f"No lucky number matched in {result_data.get('draw_no_str')}.")
+    # Draw ရက်စွဲ သို့မဟုတ် ယနေ့ရက်စွဲမှ လွန်ခဲ့သော ၇ ရက်အတွင်း (၁ ပတ်စာ) တင်ခဲ့သော စာရင်းများကိုသာ စစ်ထုတ်သည်
+    dt_draw = result_data.get("draw_date") or datetime.now()
+    from datetime import timedelta
+    week_ago_str = (dt_draw - timedelta(days=7)).strftime("%Y-%m-%d")
+    draw_date_str = dt_draw.strftime("%Y-%m-%d")
+
+    records_in_week = [
+        r for r in all_records
+        if week_ago_str <= r.get("date", "") <= draw_date_str
+    ]
+
+    if not records_in_week:
+        logger.info(f"No lucky numbers posted within the past 1 week ({week_ago_str} to {draw_date_str}).")
         return None
 
-    logger.info(f"🎉 Found {len(matches)} lucky winner hits in {result_data.get('draw_no_str')}!")
-    post = build_winner_post(result_data, matches, lucky_rec)
+    # ၁ ပတ်စာအတွင်း ထုတ်ပြန်ခဲ့သော ဂဏန်းများနှင့် နေ့ရက်များကို စုစည်းသည်
+    week_numbers = []
+    matched_day_names = []
+    for r in records_in_week:
+        nums = r.get("numbers", [])
+        week_numbers.extend(nums)
+
+    # Winner တိုက်စစ်သည်
+    matches = check_winners(result_data, week_numbers)
+    if not matches:
+        logger.info(f"No lucky number matched in {result_data.get('draw_no_str')} from past 1 week lucky posts.")
+        return None
+
+    # ဘယ်နေ့တွေက Lucky post နဲ့ ပေါက်ခဲ့လဲ နေ့အမည် စစ်ဆေးသည်
+    matched_num_set = {m["number"] for m in matches}
+    days_won = []
+    for r in records_in_week:
+        if any(n in matched_num_set for n in r.get("numbers", [])):
+            dname = r.get("day_name", "")
+            if dname and dname not in days_won:
+                days_won.append(dname)
+
+    if days_won:
+        if len(days_won) == 1:
+            matched_days_str = f"ပြီးခဲ့တဲ့ {days_won[0]}"
+        else:
+            matched_days_str = f"ပြီးခဲ့တဲ့ {', '.join(days_won)}"
+    else:
+        matched_days_str = "ပြီးခဲ့တဲ့တစ်ပတ်အတွင်း"
+
+    logger.info(f"🎉 Found {len(matches)} lucky winner hits in {result_data.get('draw_no_str')} from past week!")
+    post = build_winner_post(result_data, matches, matched_days_str)
     if post and draw_no:
         set_last_posted_winner_draw(draw_no)
     return post
+
 
