@@ -182,14 +182,16 @@ def generate_lucky_numbers(df: pd.DataFrame, top_n: int = None) -> list[dict]:
 
         chosen_numbers.append(num)
 
-    # ၅ စုံကို sequence ရောသမမွှေနှောက်သည်
-    sec_random.shuffle(chosen_numbers)
-
     # ၃။ ဂဏန်းတစ်ခုချင်းစီ၏ Singapore Pools ထွက်ကြိမ် stats များကို စစ်ဆေးထည့်သွင်းခြင်း
     results = [get_stats_for_number(num, df) for num in chosen_numbers]
 
-    logger.info(f"✨ Final 5 Lucky Numbers (2 Analyzed + 3 Random): {[r['number'] for r in results]}")
+    # ၄။ Post တင်ရာတွင် ဆုထွက်ကြိမ် အများဆုံး ဂဏန်းများက အပေါ်ဆုံး (Rank 1, 2) တွင် ရောက်စေရန်
+    # ဆုကြီးအကြိမ်ရေ၊ ထို့နောက် ဆုသေးအကြိမ်ရေဖြင့် အစဉ်လိုက် စီစဉ်ပေးသည် (Sorting by major_count, minor_count descending)
+    results.sort(key=lambda x: (x.get('major_count', 0), x.get('minor_count', 0)), reverse=True)
+
+    logger.info(f"✨ Final 5 Lucky Numbers (Sorted by counts): {[r['number'] for r in results]}")
     return results
+
 
 
 def analyze(top_n: int = None) -> list[dict]:

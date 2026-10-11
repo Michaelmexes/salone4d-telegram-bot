@@ -198,11 +198,37 @@ def build_winner_post(result_data: dict, matches: list, lucky_record: dict = Non
     return post
 
 
+def get_last_posted_winner_draw() -> str:
+    """နောက်ဆုံး Post တင်ပြီးသော Winner Draw အမှတ်အသားကို ဖတ်သည်"""
+    if os.path.exists(LAST_POSTED_WINNER_FILE):
+        try:
+            with open(LAST_POSTED_WINNER_FILE, "r", encoding="utf-8") as f:
+                return f.read().strip()
+        except Exception:
+            pass
+    return ""
+
+
+def set_last_posted_winner_draw(draw_no_str: str):
+    """Post တင်ပြီးသော Winner Draw အမှတ်အသားကို မှတ်သားသည်"""
+    try:
+        with open(LAST_POSTED_WINNER_FILE, "w", encoding="utf-8") as f:
+            f.write(draw_no_str.strip())
+    except Exception as e:
+        logger.warning(f"Error saving last posted winner draw: {e}")
+
+
 def check_and_build_winner_post(result_data: dict) -> str:
     """
     နောက်ဆုံး Result နှင့် Lucky numbers များကို စစ်ဆေး၍ Post စာသား ဖန်တီးပေးသည်
-    (ပေါက်ဂဏန်း မရှိပါက None ပြန်သည်)
+    (ပေါက်ဂဏန်း မရှိပါက (သို့မဟုတ်) ထို Draw အတွက် post တင်ပြီးသားဖြစ်ပါက None ပြန်သည်)
     """
+    draw_no = result_data.get("draw_no_str", "")
+    last_posted = get_last_posted_winner_draw()
+    if draw_no and draw_no == last_posted:
+        logger.info(f"ℹ️ Lucky winners for {draw_no} already posted previously. Skipping duplicate post.")
+        return None
+
     lucky_rec = get_latest_posted_lucky_numbers()
     if not lucky_rec or not lucky_rec.get("numbers"):
         logger.info("No saved lucky numbers found to match.")
@@ -214,4 +240,8 @@ def check_and_build_winner_post(result_data: dict) -> str:
         return None
 
     logger.info(f"🎉 Found {len(matches)} lucky winner hits in {result_data.get('draw_no_str')}!")
-    return build_winner_post(result_data, matches, lucky_rec)
+    post = build_winner_post(result_data, matches, lucky_rec)
+    if post and draw_no:
+        set_last_posted_winner_draw(draw_no)
+    return post
+
