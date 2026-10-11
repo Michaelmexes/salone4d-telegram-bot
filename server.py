@@ -325,8 +325,31 @@ def draw_job():
                     import scraper; scraper.update_latest()
                 except Exception:
                     pass
+                # Result ထွက်ပြီး ၅ မိနစ် (300 စက္ကန့်) အကြာတွင် Lucky Winners post စစ်ဆေးတင်မည်
+                schedule_winner_check(data, delay_seconds=300)
     except Exception as e:
         logger.error(f"Draw job failed: {e}", exc_info=True)
+
+
+def schedule_winner_check(result_data: dict, delay_seconds: int = 300):
+    """Result ထွက်ပြီး သတ်မှတ်စက္ကန့်အကြာတွင် Lucky Winner post စစ်ဆေးတင်သည်"""
+    def _delayed_check():
+        logger.info(f"⏳ Waiting {delay_seconds}s before checking Lucky Winners for {result_data.get('draw_no_str')}...")
+        import time
+        time.sleep(delay_seconds)
+        try:
+            import winner_checker
+            post = winner_checker.check_and_build_winner_post(result_data)
+            if post:
+                sent = bot.send_message(post)
+                if sent:
+                    logger.info(f"🏆 Lucky Winners celebratory post sent for {result_data.get('draw_no_str')}!")
+            else:
+                logger.info(f"ℹ️ No matching lucky winners to post for {result_data.get('draw_no_str')}.")
+        except Exception as e:
+            logger.error(f"Error in delayed winner check: {e}")
+
+    threading.Thread(target=_delayed_check, daemon=True).start()
 
 
 @app.route("/")
@@ -349,6 +372,18 @@ def trig_hot():
 @app.route("/trigger/result", methods=["POST"])
 def trig_draw():
     threading.Thread(target=draw_job, daemon=True).start()
+    return jsonify({"status": "ok"})
+
+@app.route("/trigger/winner", methods=["POST"])
+def trig_winner():
+    def _run_winner():
+        data = result_poster.fetch_latest_result()
+        if data:
+            import winner_checker
+            post = winner_checker.check_and_build_winner_post(data)
+            if post:
+                bot.send_message(post)
+    threading.Thread(target=_run_winner, daemon=True).start()
     return jsonify({"status": "ok"})
 
 

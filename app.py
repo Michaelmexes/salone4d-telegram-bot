@@ -179,11 +179,35 @@ def health():
     return jsonify({
         "status": "ok",
         "service": "salone4d-bot",
-        "channel": getattr(config, "CHANNEL_ID", "@mexes30salone"),
+        "channel": getattr(config, "CHANNEL_ID", "@salone4d"),
         "myanmar_time": now_mm,
         "keep_alive": True,
         "timestamp": int(time.time())
     }), 200
+
+@flask_app.route("/trigger/hot", methods=["POST"])
+def trig_hot():
+    import main as hot_pipeline
+    threading.Thread(target=hot_pipeline.run, daemon=True).start()
+    return jsonify({"status": "ok", "action": "hot_numbers_triggered"})
+
+@flask_app.route("/trigger/result", methods=["POST"])
+def trig_draw():
+    import scheduler
+    threading.Thread(target=scheduler.check_and_post_draw_result, daemon=True).start()
+    return jsonify({"status": "ok", "action": "draw_result_triggered"})
+
+@flask_app.route("/trigger/winner", methods=["POST"])
+def trig_winner():
+    def _run_winner():
+        import result_poster, winner_checker, bot
+        data = result_poster.fetch_latest_result()
+        if data:
+            post = winner_checker.check_and_build_winner_post(data)
+            if post:
+                bot.send_message(post)
+    threading.Thread(target=_run_winner, daemon=True).start()
+    return jsonify({"status": "ok", "action": "winner_check_triggered"})
 
 
 def run_flask_server(port: int):

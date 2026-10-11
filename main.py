@@ -56,6 +56,13 @@ def run():
         if not hot_numbers:
             logger.error("❌ No hot numbers found. Data file စစ်ဆေးပါ။")
             return False
+
+        # Save posted lucky numbers for winner verification
+        try:
+            import winner_checker
+            winner_checker.save_posted_lucky_numbers(hot_numbers)
+        except Exception as e:
+            logger.warning(f"Could not save lucky numbers: {e}")
     except Exception as e:
         logger.error(f"❌ Analysis failed: {e}")
         return False

@@ -16,6 +16,7 @@ env/
 data/*.log
 data/*.xlsx
 data/user_memory.json
+data/posted_lucky_numbers.json
 
 # Operating System
 .DS_Store

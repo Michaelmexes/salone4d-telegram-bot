@@ -109,8 +109,32 @@ def check_and_post_draw_result():
                 scraper.update_latest()
             except Exception:
                 pass
+
+            # Result ထွက်ပြီး ၅ မိနစ် (300 စက္ကန့်) အကြာတွင် Lucky Winners post စစ်ဆေးတင်မည်
+            schedule_winner_check(result_data, delay_seconds=300)
     else:
         logger.info(f"ℹ️ Latest draw ({current_draw_no}) is already posted.")
+
+
+def schedule_winner_check(result_data: dict, delay_seconds: int = 300):
+    """Result ထွက်ပြီး သတ်မှတ်စက္ကန့်အကြာတွင် Lucky Winner post စစ်ဆေးတင်သည်"""
+    import threading
+    def _delayed_check():
+        logger.info(f"⏳ Waiting {delay_seconds}s before checking Lucky Winners for {result_data.get('draw_no_str')}...")
+        time.sleep(delay_seconds)
+        try:
+            import winner_checker
+            post = winner_checker.check_and_build_winner_post(result_data)
+            if post:
+                sent = bot.send_message(post)
+                if sent:
+                    logger.info(f"🏆 Lucky Winners celebratory post sent for {result_data.get('draw_no_str')}!")
+            else:
+                logger.info(f"ℹ️ No matching lucky winners to post for {result_data.get('draw_no_str')}.")
+        except Exception as e:
+            logger.error(f"Error in delayed winner check: {e}")
+
+    threading.Thread(target=_delayed_check, daemon=True).start()
 
 
 def hot_numbers_job():
@@ -149,5 +173,16 @@ if __name__ == '__main__':
     elif len(sys.argv) > 1 and sys.argv[1] == '--hot-now':
         # Hot numbers ကို ချက်ချင်း တင်လိုပါက
         hot_numbers_job()
+    elif len(sys.argv) > 1 and sys.argv[1] == '--winner-now':
+        # Lucky winner post ကို ချက်ချင်း စမ်းစစ်ပြီး တင်လိုပါက
+        import winner_checker
+        data = result_poster.fetch_latest_result()
+        if data:
+            post = winner_checker.check_and_build_winner_post(data)
+            if post:
+                print(post)
+                bot.send_message(post)
+            else:
+                print("No matching winners found for latest draw.")
     else:
         start()
