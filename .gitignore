@@ -13,11 +13,27 @@ env/
 
 # Logs and runtime data
 *.log
+*.log.*
 data/*.log
 data/*.xlsx
+data/*.sqlite
+data/*.sqlite3
+data/*.db
 data/user_memory.json
 data/posted_lucky_numbers.json
+
+# Large media files (if any are saved)
+*.mp4
+*.mkv
+*.avi
+*.mov
+*.zip
+*.tar.gz
+*.rar
+*.7z
 
 # Operating System
 .DS_Store
 Thumbs.db
+desktop.ini
+
