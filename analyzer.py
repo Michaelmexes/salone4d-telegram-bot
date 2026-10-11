@@ -73,41 +73,104 @@ def is_pattern_repetitive(num: str) -> bool:
     return False
 
 
+def get_analyzed_numbers(df: pd.DataFrame, count: int = 2) -> list[str]:
+    """
+    Singapore Pools သမိုင်းတစ်လျှောက် (2023-Present) ပေါက်ဂဏန်း data ကို စနစ်တကျ Analyze လုပ်ပြီး
+    ဆုကြီး/ဆုသေး အမှတ်ပေးစနစ် (Weighted Scoring) နှင့် မကြာသေးမီက ထွက်ရှိမှု (Recency Momentum)
+    အပေါ် အခြေခံ၍ အကောင်းဆုံး Hot Numbers (၂ စုံ) ကို တွက်ချက်ရွေးချယ်သည်။
+    - 1st Prize: 5.0 မှတ်
+    - 2nd Prize: 4.0 မှတ်
+    - 3rd Prize: 3.0 မှတ်
+    - Starter: 1.5 မှတ်
+    - Consolation: 1.0 မှတ်
+    - Recency Boost: နောက်ဆုံး ရက်ပေါင်း ၁၈၀ အတွင်း ပေါက်ထားပါက ၁.၅ ဆ၊ ၃၆၅ ရက်အတွင်း ၁.၂ ဆ
+    """
+    if df.empty:
+        return []
+
+    try:
+        df_copy = df.copy()
+        df_copy['date_dt'] = pd.to_datetime(df_copy['date'], errors='coerce')
+        max_date = df_copy['date_dt'].max()
+
+        prize_weights = {
+            '1st': 5.0,
+            '2nd': 4.0,
+            '3rd': 3.0,
+            'Starter': 1.5,
+            'Consolation': 1.0
+        }
+
+        def score_row(row):
+            base = prize_weights.get(row.get('prize_type', ''), 1.0)
+            if pd.notnull(row['date_dt']) and pd.notnull(max_date):
+                days_ago = (max_date - row['date_dt']).days
+                if days_ago <= 180:
+                    return base * 1.5
+                elif days_ago <= 365:
+                    return base * 1.2
+            return base
+
+        df_copy['weighted_score'] = df_copy.apply(score_row, axis=1)
+
+        # Score ပေါင်းလဒ်တွက်ချက်ခြင်း
+        scores = df_copy.groupby('number')['weighted_score'].sum().reset_index()
+
+        # ဆုကြီး/ဆုသေး အရေအတွက်
+        counts = df_copy.groupby(['number', 'prize_type']).size().unstack(fill_value=0).reset_index()
+        for col in ['1st', '2nd', '3rd', 'Starter', 'Consolation']:
+            if col not in counts.columns:
+                counts[col] = 0
+        counts['major'] = counts['1st'] + counts['2nd'] + counts['3rd']
+        counts['minor'] = counts['Starter'] + counts['Consolation']
+
+        merged = pd.merge(scores, counts, on='number')
+        # Sort by total score, then major prizes, then minor prizes
+        merged = merged.sort_values(by=['weighted_score', 'major', 'minor'], ascending=False)
+
+        # Repetitive pattern များကို ရှောင်ကြဉ်ပြီး ထိပ်တန်း candidates များထဲမှ ရွေးထုတ်သည်
+        candidates = []
+        for num in merged['number'].tolist():
+            if not is_pattern_repetitive(num):
+                candidates.append(num)
+            if len(candidates) >= 10:  # Top 10 high-score pool
+                break
+
+        # Pool ထဲမှ random.SystemRandom ဖြင့် အကောင်းဆုံး ၂ စုံကို ရွေးထုတ်ခြင်း
+        # (သို့မှသာ နေ့တိုင်း ထပ်တူ မဖြစ်ဘဲ top candidate ၂ စုံထဲမှ လှည့်လည်ရွေးချယ်နိုင်မည်)
+        sec_random = random.SystemRandom()
+        if len(candidates) >= count:
+            # Top 5 candidates ထဲမှ count (၂ စုံ) ကို sample လုပ်ခြင်း
+            top_pool = candidates[:max(count * 2, 5)]
+            selected = sec_random.sample(top_pool, count)
+        else:
+            selected = candidates[:count]
+
+        logger.info(f"📊 Top 2 Data-Analyzed Hot Numbers selected: {selected}")
+        return selected
+
+    except Exception as e:
+        logger.error(f"Error in get_analyzed_numbers: {e}")
+        return []
+
+
 def generate_lucky_numbers(df: pd.DataFrame, top_n: int = None) -> list[dict]:
     """
-    Totally Random (True Random) ဖြင့် ဂဏန်း ၅ စုံ ထုတ်ပေးသည်။
-    - အနည်းဆုံး ၁ စုံသည် ဆုကြီး (သို့) ဆုသေး ၅ ကြိမ်အထက် ထွက်ဖူးသော ဂဏန်း ဖြစ်ရမည်။
-    - ကျန်ဂဏန်းများသည် ဆင်တူယိုးမှား မဖြစ်စေဘဲ စစ်မှန်သော Random ဖြစ်ရမည်။
+    Lucky Numbers ၅ စုံ ထုတ်ပေးသည်။
+    - ၂ စုံ: Singapore Pools သမိုင်းကြောင်း data ကို analyze လုပ်ပြီး ရမှတ်အမြင့်ဆုံး ထွက်ထားသော Hot Numbers
+    - ၃ စုံ: Totally Random (Cryptographically Secure OS Random) ဖြင့် ရွေးချယ်ထားသော စစ်မှန်သော Random Numbers
     """
     if top_n is None:
         top_n = config.TOP_N
 
-    # System Random (Hardware entropy / True Random)
     sec_random = random.SystemRandom()
-
     chosen_numbers = []
 
-    # ၁။ ဆုကြီး (သို့) ဆုသေး ၅ ကြိမ်နှင့်အထက် ရှိသော pool ထဲမှ ၁ စုံ သေချာပေါက် ရွေးထုတ်ခြင်း
-    if not df.empty:
-        counts = df.groupby(['number', 'prize_type']).size().unstack(fill_value=0)
-        major_sum = pd.Series(0, index=counts.index)
-        for pt in ['1st', '2nd', '3rd']:
-            if pt in counts.columns:
-                major_sum += counts[pt]
+    # ၁။ Data Analyze လုပ်ထားသော Hot Numbers ၂ စုံ ရွေးထုတ်ခြင်း
+    analyzed_numbers = get_analyzed_numbers(df, count=2)
+    chosen_numbers.extend(analyzed_numbers)
 
-        minor_sum = pd.Series(0, index=counts.index)
-        for pt in ['Starter', 'Consolation']:
-            if pt in counts.columns:
-                minor_sum += counts[pt]
-
-        # ၅ ကြိမ်နှင့်အထက် ပေါက်ထားသော High Performer ဂဏန်းများ
-        high_perf_pool = counts[(major_sum >= 5) | (minor_sum >= 5)].index.tolist()
-        if high_perf_pool:
-            special_num = sec_random.choice(high_perf_pool)
-            chosen_numbers.append(special_num)
-            logger.info(f"🌟 Guaranteed 5+ Prize Number selected: {special_num}")
-
-    # ၂။ ကျန်ရှိသော ဂဏန်းများကို Totally Random ဖြင့် ကွဲပြားစွာ ရွေးထုတ်ခြင်း
+    # ၂။ ကျန်ရှိသော ဂဏန်းများကို Totally Random ဖြင့် ကွဲပြားစွာ ရွေးထုတ်ခြင်း (၃ စုံ)
     attempts = 0
     while len(chosen_numbers) < top_n and attempts < 1000:
         attempts += 1
@@ -119,13 +182,13 @@ def generate_lucky_numbers(df: pd.DataFrame, top_n: int = None) -> list[dict]:
 
         chosen_numbers.append(num)
 
-    # အစဉ်လိုက် ရောသမမွှေနှောက်သည်
+    # ၅ စုံကို sequence ရောသမမွှေနှောက်သည်
     sec_random.shuffle(chosen_numbers)
 
-    # ၃။ ဂဏန်းတစ်ခုချင်းစီ၏ Singapore Pools ထွက်ကြိမ် stats များကို ပြန်စစ်သည်
+    # ၃။ ဂဏန်းတစ်ခုချင်းစီ၏ Singapore Pools ထွက်ကြိမ် stats များကို စစ်ဆေးထည့်သွင်းခြင်း
     results = [get_stats_for_number(num, df) for num in chosen_numbers]
 
-    logger.info(f"✨ Final 5 Totally Random Lucky Numbers: {[r['number'] for r in results]}")
+    logger.info(f"✨ Final 5 Lucky Numbers (2 Analyzed + 3 Random): {[r['number'] for r in results]}")
     return results
 
 
@@ -136,6 +199,10 @@ def analyze(top_n: int = None) -> list[dict]:
 
 
 if __name__ == '__main__':
+    import sys
+    if sys.platform == 'win32':
+        sys.stdout.reconfigure(encoding='utf-8')
     items = analyze()
     for item in items:
         print(f"  {item['number']} -> ဆုကြီး: {item['major_count']} ကြိမ် | ဆုသေး: {item['minor_count']} ကြိမ်")
+
