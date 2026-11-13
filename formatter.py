@@ -91,7 +91,7 @@ def build_post(hot_numbers: list[dict], dt: datetime = None) -> str:
         'Base on Singapore Pools 4D',
         '📈 2023 ─ 2026 Data အပေါ် အခြေခံ၍ ဖေါ်ပြထားပါသည်။',
         '🍀 ကံကောင်းပါစေ! 🍀',
-        getattr(config, 'CHANNEL_SIGNATURE', '@Salone4dOfficial'),
+        getattr(config, 'CHANNEL_SIGNATURE', '@salone4d'),
     ]
 
     return '\n'.join(lines)

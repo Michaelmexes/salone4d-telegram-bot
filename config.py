@@ -39,7 +39,7 @@ CHANNELS = {
 }
 
 SIGNATURES = {
-    "production": "@Salone4dOfficial",
+    "production": "@salone4d",
     "staging": "@mexes30salone",
 }
 
@@ -58,8 +58,8 @@ if not CHANNEL_ID.startswith("@"):
 
 TELEGRAM_CHANNEL = CHANNEL_ID
 
-# Post Footer တွင် ဖော်ပြမည့် Signature (production တွင် @Salone4dOfficial / staging တွင် @mexes30salone)
-CHANNEL_SIGNATURE = SIGNATURES.get(os.getenv("ENVIRONMENT", ENVIRONMENT).lower().strip(), "@Salone4dOfficial")
+# Post Footer တွင် ဖော်ပြမည့် Signature (production တွင် @salone4d / staging တွင် @mexes30salone)
+CHANNEL_SIGNATURE = SIGNATURES.get(os.getenv("ENVIRONMENT", ENVIRONMENT).lower().strip(), "@salone4d")
 
 # Web Service Port for Render / Cloud hosting
 PORT = int(os.getenv("PORT", "10000"))

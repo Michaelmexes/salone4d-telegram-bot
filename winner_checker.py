@@ -182,7 +182,7 @@ def build_winner_post(result_data: dict, matches: list, matched_days_str: str = 
 
     prizes_block = "\n".join(prize_lines)
 
-    signature = getattr(config, "CHANNEL_SIGNATURE", "@Salone4dOfficial")
+    signature = getattr(config, "CHANNEL_SIGNATURE", "@salone4d")
 
     post = (
         "🔴 WIN! 🎯 SALONE4D LUCKY WINNERS 🎯\n"

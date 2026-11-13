@@ -21,7 +21,7 @@ LAST_POSTED_APP_FILE = getattr(config, "LAST_POSTED_APP_FILE", "data/last_posted
 def build_app_download_post() -> str:
     """Option 2 - တိုတိုရှင်းရှင်း ပုံစံဖြင့် App Download Link Post စာသား ဖန်တီးသည်"""
     bot_name = getattr(config, "BOT_USERNAME", "@Salone4dOfficialBot")
-    signature = getattr(config, "CHANNEL_SIGNATURE", "@Salone4dOfficial")
+    signature = getattr(config, "CHANNEL_SIGNATURE", "@salone4d")
     app_link = getattr(config, "APP_LINK", "https://t.ly/pemBm")
     support_phone = getattr(config, "SUPPORT_PHONE", "+95 9 894 169 717")
 
