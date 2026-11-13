@@ -209,6 +209,14 @@ def trig_winner():
     threading.Thread(target=_run_winner, daemon=True).start()
     return jsonify({"status": "ok", "action": "winner_check_triggered"})
 
+@flask_app.route("/trigger/applink", methods=["POST"])
+def trig_applink():
+    def _run_applink():
+        import app_poster
+        app_poster.post_app_download_if_due(force=True)
+    threading.Thread(target=_run_applink, daemon=True).start()
+    return jsonify({"status": "ok", "action": "app_download_triggered"})
+
 
 def run_flask_server(port: int):
     """Run lightweight Flask web server."""

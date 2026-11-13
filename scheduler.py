@@ -3,7 +3,8 @@
 SALONE 4D - Master Scheduler
 ==========================================
 ၁။ နေ့တိုင်း မနက် ၁၀:၀၀ တွင် Hot Numbers Post တင်ပေးခြင်း
-၂။ ဗုဒ္ဓဟူး၊ စနေ၊ တနင်္ဂနွေ ညနေ ၅:၁၅ ~ ၅:၄၅ (မြန်မာစံတော်ချိန်) တွင် 
+၂။ User အသစ်များအတွက် ၂ ရက် ၁ ကြိမ် မနက် ၁၀:၃၀ တွင် App Download Link Post တင်ပေးခြင်း
+၃။ ဗုဒ္ဓဟူး၊ စနေ၊ တနင်္ဂနွေ ညနေ ၅:၁၅ ~ ၅:၄၅ (မြန်မာစံတော်ချိန်) တွင် 
    Singapore Pools 4D Official Result ထွက်ထွက်ချင်း Auto Post တင်ပေးခြင်း
 """
 
@@ -168,6 +169,16 @@ def hot_numbers_job():
         hot_pipeline.run()
 
 
+def app_download_job():
+    """၂ ရက်လျှင် ၁ ကြိမ် မနက် ၁၀:၃၀ နာရီတွင် App Download Link Post တင်သည့် အလုပ်"""
+    logger.info(f"⏰ App download link scheduler triggered at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    try:
+        import app_poster
+        app_poster.post_app_download_if_due()
+    except Exception as e:
+        logger.error(f"❌ Error in app_download_job: {e}")
+
+
 def start():
     """Master Scheduler စတင်လည်ပတ်ခြင်း"""
     logger.info("=" * 60)
@@ -176,11 +187,16 @@ def start():
     # 1. နေ့စဉ် သတ်မှတ်ချိန်တွင် Hot numbers ပို့မည်
     schedule.every().day.at(config.POST_TIME).do(hot_numbers_job)
 
-    # 2. Draw နေ့များ (Wed, Sat, Sun) တွင် ညနေ ၅:၄၅ PM မှစ၍ Result အသစ် စစ်ဆေးမည်
+    # 2. User အသစ်များအတွက် App Download Link ကို ၂ ရက် ၁ ကြိမ် မနက် ၁၀:၃၀ တွင် စစ်ဆေးတင်မည်
+    app_post_time = getattr(config, 'APP_POST_TIME', '10:30')
+    schedule.every().day.at(app_post_time).do(app_download_job)
+    logger.info(f"   2. App Download Link Post Time : {app_post_time} (Every {getattr(config, 'APP_POST_INTERVAL_DAYS', 2)} days)")
+
+    # 3. Draw နေ့များ (Wed, Sat, Sun) တွင် ညနေ ၅:၄၅ PM မှစ၍ Result အသစ် စစ်ဆေးမည်
     interval = getattr(config, 'RESULT_CHECK_INTERVAL_MINS', 2)
     schedule.every(interval).minutes.do(check_and_post_draw_result)
 
-    logger.info(f"   2. Official Draw Result Check  : Every {interval} mins (5:45 PM - 7:00 PM on Wed, Sat, Sun)")
+    logger.info(f"   3. Official Draw Result Check  : Every {interval} mins (5:45 PM - 7:00 PM on Wed, Sat, Sun)")
     logger.info("=" * 60)
     logger.info("✅ All tasks scheduled. Listening for events... (Press Ctrl+C to stop)")
 
@@ -194,6 +210,10 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == '--result-now':
         # Result post ကို ချက်ချင်း စမ်းတင်လိုပါက
         check_and_post_draw_result()
+    elif len(sys.argv) > 1 and sys.argv[1] == '--app-now':
+        # App download link post ကို ချက်ချင်း စမ်းတင်လိုပါက
+        import app_poster
+        app_poster.post_app_download_if_due(force=True)
     elif len(sys.argv) > 1 and sys.argv[1] == '--hot-now':
         # Hot numbers ကို ချက်ချင်း တင်လိုပါက
         hot_numbers_job()

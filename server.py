@@ -305,6 +305,14 @@ def hot_job():
     except Exception as e:
         logger.error(f"Hot numbers job failed: {e}", exc_info=True)
 
+def app_job():
+    logger.info("App download link job triggered")
+    try:
+        import app_poster
+        app_poster.post_app_download_if_due()
+    except Exception as e:
+        logger.error(f"App download job failed: {e}", exc_info=True)
+
 def draw_job():
     try:
         import scheduler
@@ -357,6 +365,14 @@ def trig_draw():
     threading.Thread(target=draw_job, daemon=True).start()
     return jsonify({"status": "ok"})
 
+@app.route("/trigger/applink", methods=["POST"])
+def trig_applink():
+    def _run_app():
+        import app_poster
+        app_poster.post_app_download_if_due(force=True)
+    threading.Thread(target=_run_app, daemon=True).start()
+    return jsonify({"status": "ok", "job": "applink"})
+
 @app.route("/trigger/winner", methods=["POST"])
 def trig_winner():
     def _run_winner():
@@ -375,6 +391,8 @@ logger.info("Starting SALONE 4D background services...")
 try:
     h, m = config.POST_TIME.split(":")
     scheduler.add_job(hot_job, CronTrigger(hour=int(h), minute=int(m), timezone=MYANMAR_TZ), id="h", replace_existing=True)
+    app_h, app_m = getattr(config, 'APP_POST_TIME', '10:30').split(":")
+    scheduler.add_job(app_job, CronTrigger(hour=int(app_h), minute=int(app_m), timezone=MYANMAR_TZ), id="app_dl", replace_existing=True)
     scheduler.add_job(draw_job, CronTrigger(minute=f"*/{config.RESULT_CHECK_INTERVAL_MINS}", hour="17-19", timezone=MYANMAR_TZ), id="d", replace_existing=True)
     scheduler.start()
     logger.info("Scheduler started!")

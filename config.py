@@ -80,6 +80,7 @@ OPENROUTER_MODELS = [
 # Support Contacts & Info
 COMPANY_NAME_EN = "Salone4D Lottery Service"
 COMPANY_NAME_MY = "Salone4D ထီဝန်ဆောင်မှု"
+BOT_USERNAME = os.getenv("BOT_USERNAME", "@Salone4dOfficialBot")
 SUPPORT_PHONE = "+95 9 894 169 717"
 SUPPORT_VIBER = "+95 9 894 169 717"
 APP_LINK = "https://t.ly/pemBm"
@@ -130,6 +131,11 @@ RESULT_POST_START_TIME = os.getenv("RESULT_POST_START_TIME", os.getenv("RESULT_C
 RESULT_CHECK_START_TIME = RESULT_POST_START_TIME       # စတင်စစ်ဆေးမည့်အချိန် (မြန်မာစံတော်ချိန် ညနေ ၅:၄၅ PM)
 RESULT_CHECK_END_TIME   = os.getenv("RESULT_CHECK_END_TIME", "19:00")  # နောက်ဆုံးစစ်ဆေးမည့်အချိန် (ညနေ ၇:၀၀ PM)
 RESULT_CHECK_INTERVAL_MINS = int(os.getenv("RESULT_CHECK_INTERVAL_MINS", "2"))  # ၂ မိနစ်တစ်ကြိမ် စစ်ဆေးမည်
+
+# ၃။ App Download Link Schedule (User အသစ်များအတွက် ၂ ရက် ၁ ကြိမ် မနက် ၁၀:၃၀ နာရီတွင် Post တင်မည့်အချိန်)
+APP_POST_TIME = os.getenv("APP_POST_TIME", "10:30")
+APP_POST_INTERVAL_DAYS = int(os.getenv("APP_POST_INTERVAL_DAYS", "2"))
+LAST_POSTED_APP_FILE = "data/last_posted_app_download.txt"
 
 # ==========================================
 # Myanmar Locale
