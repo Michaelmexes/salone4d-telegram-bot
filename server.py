@@ -753,11 +753,40 @@ try:
 except Exception as e:
     logger.error(f"Scheduler: {e}")
 
+def keep_alive_worker():
+    """
+    Pings both Salone4D bot server and ChateChat platform every 6 minutes
+    to prevent Render Free Tier instances from going to sleep.
+    """
+    import time
+    logger.info("🔄 Keep-alive worker started (6-min interval)")
+    time.sleep(20)
+    while True:
+        try:
+            self_url = os.getenv("RENDER_EXTERNAL_URL") or "https://salone4d-telegram-bot.onrender.com"
+            r = req.get(f"{self_url.rstrip('/')}/ping", timeout=12)
+            logger.info(f"🔄 Keep-alive ping self ({self_url}): {r.status_code}")
+        except Exception as e:
+            logger.warning(f"Keep-alive self ping error: {e}")
+
+        try:
+            cc_url = getattr(config, "CHATECHAT_WEBAPP_URL", "https://chatechat.onrender.com")
+            r_cc = req.get(f"{cc_url.rstrip('/')}/api/v1/webhooks/telegram/status", timeout=12)
+            logger.info(f"🔄 Keep-alive ping ChateChat ({cc_url}): {r_cc.status_code}")
+        except Exception as e:
+            logger.warning(f"Keep-alive ChateChat ping error: {e}")
+
+        time.sleep(360)
+
+
 t = threading.Thread(target=run_bot, daemon=True)
 t.start()
 
 t_cc = threading.Thread(target=run_chatechat_bot, daemon=True)
 t_cc.start()
+
+t_keepalive = threading.Thread(target=keep_alive_worker, daemon=True)
+t_keepalive.start()
 
 
 if __name__ == "__main__":
