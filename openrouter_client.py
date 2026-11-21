@@ -61,10 +61,10 @@ def get_ai_reply(user_message: str, conversation_history: list = None) -> str:
         config,
         "OPENROUTER_MODELS",
         [
-            "qwen/qwen3.8-27b:free",
-            "google/gemma-4-31b-it:free",
+            "baidu/ernie-5.5-flash-preview:free",
             "google/gemma-4-26b-a4b-it:free",
-            "nvidia/nemotron-3-super-120b-a12b:free",
+            "google/gemma-4-31b-it:free",
+            "recursive/flint-v1.0:free",
             "openrouter/free"
         ]
     )
@@ -83,12 +83,11 @@ def get_ai_reply(user_message: str, conversation_history: list = None) -> str:
             payload = {
                 "model": model,
                 "messages": chat_messages,
-                "reasoning": {"effort": "none"},
                 "max_tokens": 500,
                 "temperature": 0.5,
             }
 
-            resp = requests.post(OPENROUTER_URL, headers=HEADERS, json=payload, timeout=20)
+            resp = requests.post(OPENROUTER_URL, headers=HEADERS, json=payload, timeout=15)
             if resp.status_code == 200:
                 result_json = resp.json()
                 choices = result_json.get("choices", [])

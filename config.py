@@ -70,10 +70,10 @@ PORT = int(os.getenv("PORT", "10000"))
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")  # OpenRouter API Key (from .env or environment)
 
 OPENROUTER_MODELS = [
-    "qwen/qwen3.8-27b:free",
-    "google/gemma-4-31b-it:free",
+    "baidu/ernie-5.5-flash-preview:free",
     "google/gemma-4-26b-a4b-it:free",
-    "nvidia/nemotron-3-super-120b-a12b:free",
+    "google/gemma-4-31b-it:free",
+    "recursive/flint-v1.0:free",
     "openrouter/free"
 ]
 
