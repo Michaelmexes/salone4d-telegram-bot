@@ -327,7 +327,25 @@ def run_chatechat_bot():
                     chat_id = msg["chat"]["id"]
                     user_text = msg["text"].strip()
                     logger.info(f"ChateChat received from {chat_id}: {user_text[:30]}")
-                    chatechat_send(chat_id, WELCOME_MSG, reply_markup=CHATECHAT_KB)
+
+                    t_lower = user_text.lower()
+                    # Commands or direct download keywords -> instant welcome & download links
+                    if t_lower in ("/start", "/help", "/download", "/apk", "/app", "/webapp") or \
+                       any(k in t_lower for k in ["apk", "app", "download", "ဒေါင်း", "လင့်", "လင့်", "down"]):
+                        chatechat_send(chat_id, WELCOME_MSG, reply_markup=CHATECHAT_KB)
+                    else:
+                        # Simple questions -> ChateChat AI auto-reply
+                        ai_reply = ""
+                        try:
+                            import openrouter_client
+                            ai_reply = openrouter_client.get_chatechat_ai_reply(user_text)
+                        except Exception as e:
+                            logger.error(f"ChateChat AI error: {e}")
+
+                        if ai_reply:
+                            chatechat_send(chat_id, ai_reply, reply_markup=CHATECHAT_KB)
+                        else:
+                            chatechat_send(chat_id, WELCOME_MSG, reply_markup=CHATECHAT_KB)
         except Exception as e:
             logger.error(f"ChateChat polling: {e}")
             time.sleep(5)

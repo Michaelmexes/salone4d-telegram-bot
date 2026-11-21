@@ -110,3 +110,76 @@ def get_ai_reply(user_message: str, conversation_history: list = None) -> str:
         "လောလောဆယ် AI စနစ် အနည်းငယ် မအားလပ်သေးပါသဖြင့် အောက်ပါ Main Menu ခလုတ်များမှတစ်ဆင့် အချက်အလက်များကို ကြည့်ရှုနိုင်ပါသည် 👇\n\n"
         "အသေးစိတ် တိုက်ရိုက်မေးမြန်းလိုပါက Viber: +95 9 894 169 717 သို့ ဆက်သွယ်နိုင်ပါသည်။"
     )
+
+
+def get_chatechat_ai_reply(user_message: str, conversation_history: list = None) -> str:
+    """
+    Get simple customer service AI reply for ChateChat.
+    Keeps answers very short, concise, and focused strictly on ChateChat.
+    """
+    system_prompt = getattr(
+        config,
+        "CHATECHAT_AI_SYSTEM_PROMPT",
+        (
+            "You are the official simple Customer Care AI Assistant for ChateChat (online chat and messaging application).\n"
+            "ChateChat Details:\n"
+            "  - Android APK Download Link: https://tinyurl.com/chatechat-app\n"
+            "  - Web App (Browser access): https://chatechat.onrender.com\n"
+            "  - Supported devices: Android phones (via APK) and any browser on PC/Mobile (Web App).\n"
+            "  - Free to use: ChateChat is 100% free to chat, call and message.\n"
+            "  - Account: Users can easily sign up inside the App or Web App with their username/phone.\n"
+            "Rules:\n"
+            "  - STRICT: Answer ONLY in natural, polite Myanmar/Burmese language. Never reply in English.\n"
+            "  - Keep answers VERY SHORT and simple (1 or 2 sentences only).\n"
+            "  - ONLY answer simple questions related to ChateChat (downloading, web app, basic account usage).\n"
+            "  - If the question is outside ChateChat or too complex, politely say that you only assist with ChateChat app and guide them to use the APK or Web App.\n"
+            "  - Do NOT output chain of thought or internal reasoning. Output only the final response in Burmese."
+        )
+    )
+
+    models_to_try = getattr(
+        config,
+        "OPENROUTER_MODELS",
+        [
+            "baidu/ernie-5.5-flash-preview:free",
+            "google/gemma-4-26b-a4b-it:free",
+            "google/gemma-4-31b-it:free",
+            "recursive/flint-v1.0:free",
+            "openrouter/free"
+        ]
+    )
+
+    if conversation_history:
+        chat_messages = [{"role": "system", "content": system_prompt}] + conversation_history
+    else:
+        chat_messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message}
+        ]
+
+    for model in models_to_try:
+        try:
+            payload = {
+                "model": model,
+                "messages": chat_messages,
+                "max_tokens": 400,
+                "temperature": 0.4,
+            }
+            resp = requests.post(OPENROUTER_URL, headers=HEADERS, json=payload, timeout=12)
+            if resp.status_code == 200:
+                result_json = resp.json()
+                choices = result_json.get("choices", [])
+                if choices:
+                    msg = choices[0].get("message", {})
+                    content = msg.get("content") or ""
+                    cleaned = clean_ai_response(content)
+                    if cleaned:
+                        logger.info(f"ChateChat OpenRouter success with model: {model}")
+                        return cleaned
+            else:
+                logger.warning(f"ChateChat model {model} returned status {resp.status_code}")
+        except Exception as e:
+            logger.warning(f"ChateChat error querying model {model}: {e}")
+
+    return ""
+

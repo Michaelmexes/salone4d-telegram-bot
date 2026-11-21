@@ -129,9 +129,29 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         logger.info(f"Matched keyword from user {update.effective_user.id}: {user_text[:30]}")
         await send_welcome_response(update, context)
     else:
-        # မည်သည့် မက်ဆေ့ခ်ျ ပို့လာသည်ဖြစ်စေ ကူညီလမ်းညွှန်ပေးသည့်အနေဖြင့် Welcome & Link ပို့ပေးသည်
-        logger.info(f"General message from user {update.effective_user.id}: {user_text[:30]}")
-        await send_welcome_response(update, context)
+        # Simple questions -> ChateChat AI
+        try:
+            await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+        except Exception:
+            pass
+
+        ai_reply = ""
+        try:
+            import openrouter_client
+            loop = asyncio.get_running_loop()
+            ai_reply = await loop.run_in_executor(None, openrouter_client.get_chatechat_ai_reply, update.message.text.strip())
+        except Exception as e:
+            logger.error(f"ChateChat AI error: {e}")
+
+        if ai_reply:
+            keyboard = build_chatechat_keyboard()
+            await update.message.reply_text(
+                text=ai_reply,
+                reply_markup=keyboard,
+                disable_web_page_preview=True
+            )
+        else:
+            await send_welcome_response(update, context)
 
 
 async def setup_bot_commands(application: Application):
