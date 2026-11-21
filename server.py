@@ -262,21 +262,16 @@ def chatechat_send(chat_id, text, reply_markup=None):
         return False
 
 
-def run_chatechat_bot():
-    """ChateChat Auto-Responder polling thread using lightweight REST calls"""
-    import time
-    last_id = 0
-
-    logger.info("🤖 Starting ChateChat Auto-Responder service...")
-
-    CHATECHAT_KB = {
+def get_chatechat_kb():
+    return {
         "inline_keyboard": [
             [{"text": "📲 Download Android APK", "url": getattr(config, "CHATECHAT_APK_URL", "https://tinyurl.com/chatechat-app")}],
             [{"text": "🌐 Open Web App", "url": getattr(config, "CHATECHAT_WEBAPP_URL", "https://chatechat.onrender.com")}]
         ]
     }
 
-    WELCOME_MSG = (
+def get_chatechat_welcome_msg():
+    return (
         "💬 *ChateChat မှ ကြိုဆိုပါသည်!* ✨\n"
         "───────────────────────\n\n"
         "မင်္ဂလာပါခင်ဗျာ... ChateChat ကို အသုံးပြုရန်အတွက် အောက်ပါ Link များမှတစ်ဆင့် Android Application (သို့မဟုတ်) Web App ကို အလွယ်တကူ ဝင်ရောက်အသုံးပြုနိုင်ပါသည် 👇\n\n"
@@ -286,6 +281,61 @@ def run_chatechat_bot():
         f"👉 {getattr(config, 'CHATECHAT_WEBAPP_URL', 'https://chatechat.onrender.com')}\n\n"
         "အောက်ပါ ခလုတ်များကို နှိပ်၍လည်း တိုက်ရိုက် ရယူနိုင်ပါသည်ခင်ဗျာ 👇"
     )
+
+def _process_chatechat_message(chat_id, user_text):
+    """Processes user message for ChateChat (shared by Polling & Webhook Relay)"""
+    kb = get_chatechat_kb()
+    welcome = get_chatechat_welcome_msg()
+
+    t_lower = user_text.lower()
+    # Commands or direct download keywords -> instant welcome & download links
+    if t_lower in ("/start", "/help", "/download", "/apk", "/app", "/webapp") or \
+       any(k in t_lower for k in ["apk", "app", "download", "ဒေါင်း", "လင့်", "လင့်", "down"]):
+        chatechat_send(chat_id, welcome, reply_markup=kb)
+    else:
+        # Simple questions -> ChateChat AI auto-reply
+        ai_reply = ""
+        try:
+            import openrouter_client
+            ai_reply = openrouter_client.get_chatechat_ai_reply(user_text)
+        except Exception as e:
+            logger.error(f"ChateChat AI error: {e}")
+
+        if ai_reply:
+            chatechat_send(chat_id, ai_reply, reply_markup=kb)
+        else:
+            chatechat_send(chat_id, welcome, reply_markup=kb)
+
+
+# -------- ChateChat Dedicated Webhook Relay Route ----------
+@app.route("/webhook/chatechat", methods=["POST", "GET"])
+def chatechat_webhook():
+    if request.method == "GET":
+        return jsonify({"service": "chatechat_webhook", "status": "active"}), 200
+
+    try:
+        u = request.get_json(force=True, silent=True) or {}
+        if not u:
+            return "OK", 200
+
+        msg = u.get("message", {})
+        if msg and msg.get("text"):
+            chat_id = msg.get("chat", {}).get("id")
+            user_text = msg.get("text", "").strip()
+            if chat_id and user_text:
+                threading.Thread(target=_process_chatechat_message, args=(chat_id, user_text), daemon=True).start()
+    except Exception as e:
+        logger.error(f"ChateChat webhook error: {e}")
+
+    return "OK", 200
+
+
+def run_chatechat_bot():
+    """ChateChat Auto-Responder polling thread using lightweight REST calls"""
+    import time
+    last_id = 0
+
+    logger.info("🤖 Starting ChateChat Auto-Responder service...")
 
     commands_set = False
 
@@ -327,25 +377,7 @@ def run_chatechat_bot():
                     chat_id = msg["chat"]["id"]
                     user_text = msg["text"].strip()
                     logger.info(f"ChateChat received from {chat_id}: {user_text[:30]}")
-
-                    t_lower = user_text.lower()
-                    # Commands or direct download keywords -> instant welcome & download links
-                    if t_lower in ("/start", "/help", "/download", "/apk", "/app", "/webapp") or \
-                       any(k in t_lower for k in ["apk", "app", "download", "ဒေါင်း", "လင့်", "လင့်", "down"]):
-                        chatechat_send(chat_id, WELCOME_MSG, reply_markup=CHATECHAT_KB)
-                    else:
-                        # Simple questions -> ChateChat AI auto-reply
-                        ai_reply = ""
-                        try:
-                            import openrouter_client
-                            ai_reply = openrouter_client.get_chatechat_ai_reply(user_text)
-                        except Exception as e:
-                            logger.error(f"ChateChat AI error: {e}")
-
-                        if ai_reply:
-                            chatechat_send(chat_id, ai_reply, reply_markup=CHATECHAT_KB)
-                        else:
-                            chatechat_send(chat_id, WELCOME_MSG, reply_markup=CHATECHAT_KB)
+                    _process_chatechat_message(chat_id, user_text)
         except Exception as e:
             logger.error(f"ChateChat polling: {e}")
             time.sleep(5)
