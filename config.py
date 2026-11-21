@@ -94,6 +94,8 @@ CHATECHAT_BOT_TOKEN = os.getenv("CHATECHAT_BOT_TOKEN", "")
 CHATECHAT_BOT_USERNAME = os.getenv("CHATECHAT_BOT_USERNAME", "@chatechatbot")
 CHATECHAT_APK_URL = os.getenv("CHATECHAT_APK_URL", "https://tinyurl.com/chatechat-app")
 CHATECHAT_WEBAPP_URL = os.getenv("CHATECHAT_WEBAPP_URL", "https://chatechat.onrender.com")
+CHATECHAT_BOT_REPLY_URL = os.getenv("CHATECHAT_BOT_REPLY_URL", "https://chatechat.onrender.com/api/v1/webhooks/telegram/bot-reply")
+
 
 CHATECHAT_AI_SYSTEM_PROMPT = (
     "You are the official simple Customer Care AI Assistant for ChateChat (online chat and messaging application).\n"

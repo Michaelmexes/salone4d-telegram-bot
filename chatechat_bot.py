@@ -7,6 +7,8 @@
 import sys
 import logging
 import asyncio
+import threading
+import requests
 from telegram import Update, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ChatAction
 from telegram.ext import (
@@ -75,6 +77,24 @@ def build_welcome_message() -> str:
     return message
 
 
+def sync_to_chatechat_inbox(chat_id, text, bot_name="ChateChat AI"):
+    """Sync bot reply to ChateChat Inbox in real-time via Webhook API"""
+    def _post():
+        try:
+            url = getattr(config, "CHATECHAT_BOT_REPLY_URL", "https://chatechat.onrender.com/api/v1/webhooks/telegram/bot-reply")
+            payload = {
+                "chatId": str(chat_id),
+                "text": text,
+                "botName": bot_name
+            }
+            res = requests.post(url, json=payload, timeout=5)
+            logger.info(f"ChateChat inbox sync status for chat {chat_id}: {res.status_code}")
+        except Exception as e:
+            logger.warning(f"ChateChat inbox sync error: {e}")
+
+    threading.Thread(target=_post, daemon=True).start()
+
+
 async def send_welcome_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Welcome & APK Download မက်ဆေ့ခ်ျနှင့် ခလုတ်များကို ပို့ပေးသည်"""
     if not update.effective_chat:
@@ -96,6 +116,7 @@ async def send_welcome_response(update: Update, context: ContextTypes.DEFAULT_TY
             parse_mode="Markdown",
             disable_web_page_preview=True
         )
+        sync_to_chatechat_inbox(update.effective_chat.id, text)
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -150,6 +171,7 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
                 reply_markup=keyboard,
                 disable_web_page_preview=True
             )
+            sync_to_chatechat_inbox(update.effective_chat.id, ai_reply)
         else:
             await send_welcome_response(update, context)
 

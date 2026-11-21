@@ -242,6 +242,24 @@ def run_bot():
 
 
 # -------- ChateChat Auto-Responder Bot ----------
+def sync_to_chatechat_inbox(chat_id, text, bot_name="ChateChat AI"):
+    """Sync bot reply to ChateChat Inbox in real-time via Webhook API"""
+    def _post():
+        try:
+            url = getattr(config, "CHATECHAT_BOT_REPLY_URL", "https://chatechat.onrender.com/api/v1/webhooks/telegram/bot-reply")
+            payload = {
+                "chatId": str(chat_id),
+                "text": text,
+                "botName": bot_name
+            }
+            res = req.post(url, json=payload, timeout=5)
+            logger.info(f"ChateChat inbox sync status for chat {chat_id}: {res.status_code}")
+        except Exception as e:
+            logger.warning(f"ChateChat inbox sync error: {e}")
+
+    threading.Thread(target=_post, daemon=True).start()
+
+
 def chatechat_send(chat_id, text, reply_markup=None):
     token = getattr(config, "CHATECHAT_BOT_TOKEN", None) or os.getenv("CHATECHAT_BOT_TOKEN", "")
     if not token:
@@ -256,6 +274,8 @@ def chatechat_send(chat_id, text, reply_markup=None):
         payload["reply_markup"] = json.dumps(reply_markup)
     try:
         r = req.post(f"https://api.telegram.org/bot{token}/sendMessage", json=payload, timeout=10)
+        # Real-time sync to ChateChat Inbox
+        sync_to_chatechat_inbox(chat_id, text)
         return r.json().get("ok", False)
     except Exception as e:
         logger.error(f"chatechat_send error: {e}")
