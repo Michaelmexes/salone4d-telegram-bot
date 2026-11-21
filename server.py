@@ -241,6 +241,99 @@ def run_bot():
 
 
 
+# -------- ChateChat Auto-Responder Bot ----------
+def chatechat_send(chat_id, text, reply_markup=None):
+    token = getattr(config, "CHATECHAT_BOT_TOKEN", None) or os.getenv("CHATECHAT_BOT_TOKEN", "")
+    if not token:
+        return False
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "Markdown",
+        "disable_web_page_preview": True
+    }
+    if reply_markup:
+        payload["reply_markup"] = json.dumps(reply_markup)
+    try:
+        r = req.post(f"https://api.telegram.org/bot{token}/sendMessage", json=payload, timeout=10)
+        return r.json().get("ok", False)
+    except Exception as e:
+        logger.error(f"chatechat_send error: {e}")
+        return False
+
+
+def run_chatechat_bot():
+    """ChateChat Auto-Responder polling thread using lightweight REST calls"""
+    import time
+    last_id = 0
+
+    logger.info("🤖 Starting ChateChat Auto-Responder service...")
+
+    CHATECHAT_KB = {
+        "inline_keyboard": [
+            [{"text": "📲 Download Android APK", "url": getattr(config, "CHATECHAT_APK_URL", "https://tinyurl.com/chatechat-app")}],
+            [{"text": "🌐 Open Web App", "url": getattr(config, "CHATECHAT_WEBAPP_URL", "https://chatechat.onrender.com")}]
+        ]
+    }
+
+    WELCOME_MSG = (
+        "💬 *ChateChat မှ ကြိုဆိုပါသည်!* ✨\n"
+        "───────────────────────\n\n"
+        "မင်္ဂလာပါခင်ဗျာ... ChateChat ကို အသုံးပြုရန်အတွက် အောက်ပါ Link များမှတစ်ဆင့် Android Application (သို့မဟုတ်) Web App ကို အလွယ်တကူ ဝင်ရောက်အသုံးပြုနိုင်ပါသည် 👇\n\n"
+        "📲 *Android APK ဒေါင်းလုဒ် ရယူရန်:*\n"
+        f"👉 {getattr(config, 'CHATECHAT_APK_URL', 'https://tinyurl.com/chatechat-app')}\n\n"
+        "🌐 *Web App တိုက်ရိုက် အသုံးပြုရန်:*\n"
+        f"👉 {getattr(config, 'CHATECHAT_WEBAPP_URL', 'https://chatechat.onrender.com')}\n\n"
+        "အောက်ပါ ခလုတ်များကို နှိပ်၍လည်း တိုက်ရိုက် ရယူနိုင်ပါသည်ခင်ဗျာ 👇"
+    )
+
+    commands_set = False
+
+    while True:
+        token = getattr(config, "CHATECHAT_BOT_TOKEN", None) or os.getenv("CHATECHAT_BOT_TOKEN", "")
+        if not token:
+            time.sleep(10)
+            continue
+
+        if not commands_set:
+            try:
+                req.post(f"https://api.telegram.org/bot{token}/setMyCommands", json={
+                    "commands": [
+                        {"command": "start", "description": "🏠 ကြိုဆိုပါသည် (Welcome & App Links)"},
+                        {"command": "download", "description": "📲 Android APK ဒေါင်းလုဒ်"},
+                        {"command": "webapp", "description": "🌐 Web App ဖွင့်ရန်"},
+                    ]
+                }, timeout=10)
+                commands_set = True
+                logger.info("ChateChat setMyCommands registered successfully.")
+            except Exception as e:
+                logger.warning(f"ChateChat setMyCommands: {e}")
+
+        try:
+            r = req.post(f"https://api.telegram.org/bot{token}/getUpdates",
+                json={"offset": last_id + 1, "timeout": 30, "allowed_updates": ["message"]},
+                timeout=35)
+            data = r.json()
+            if not data.get("ok"):
+                time.sleep(5)
+                continue
+            for upd in data.get("result", []):
+                uid = upd["update_id"]
+                if uid <= last_id:
+                    continue
+                last_id = uid
+                msg = upd.get("message")
+                if msg and msg.get("text"):
+                    chat_id = msg["chat"]["id"]
+                    user_text = msg["text"].strip()
+                    logger.info(f"ChateChat received from {chat_id}: {user_text[:30]}")
+                    chatechat_send(chat_id, WELCOME_MSG, reply_markup=CHATECHAT_KB)
+        except Exception as e:
+            logger.error(f"ChateChat polling: {e}")
+            time.sleep(5)
+
+
+
 @app.route("/trigger/test", methods=["POST"])
 def trig_test():
     """Test: manually run hot numbers pipeline and post to channel"""
@@ -345,7 +438,11 @@ def schedule_winner_check(result_data: dict, delay_seconds: int = 300):
 
 @app.route("/")
 def index():
-    return jsonify({"status": "running", "bot": config.CHANNEL_ID,
+    has_cc = bool(getattr(config, "CHATECHAT_BOT_TOKEN", None) or os.getenv("CHATECHAT_BOT_TOKEN", ""))
+    return jsonify({
+        "status": "running",
+        "bot": config.CHANNEL_ID,
+        "chatechat_configured": has_cc,
         "time": datetime.now(MYANMAR_TZ).isoformat(),
         "scheduled_posts": {"hot_numbers": config.POST_TIME,
             "draw_check": f"{config.RESULT_CHECK_INTERVAL_MINS} mins (5:45-7PM Wed/Sat/Sun)"}})
@@ -386,6 +483,20 @@ def trig_winner():
     return jsonify({"status": "ok"})
 
 
+@app.route("/config/chatechat", methods=["POST", "GET"])
+def config_chatechat():
+    if request.method == "POST":
+        data = request.get_json(force=True, silent=True) or {}
+        new_token = data.get("token") or request.args.get("token")
+        if new_token:
+            os.environ["CHATECHAT_BOT_TOKEN"] = new_token
+            setattr(config, "CHATECHAT_BOT_TOKEN", new_token)
+            return jsonify({"status": "ok", "message": "CHATECHAT_BOT_TOKEN configured successfully"}), 200
+        return jsonify({"status": "error", "message": "Missing token parameter"}), 400
+    has_token = bool(getattr(config, "CHATECHAT_BOT_TOKEN", None) or os.getenv("CHATECHAT_BOT_TOKEN", ""))
+    return jsonify({"service": "chatechat", "configured": has_token})
+
+
 # ---- Startup: run at module level (gunicorn imports this) ----
 logger.info("Starting SALONE 4D background services...")
 try:
@@ -401,6 +512,10 @@ except Exception as e:
 
 t = threading.Thread(target=run_bot, daemon=True)
 t.start()
+
+t_cc = threading.Thread(target=run_chatechat_bot, daemon=True)
+t_cc.start()
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
