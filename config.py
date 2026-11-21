@@ -91,6 +91,14 @@ ADMIN_TELEGRAM = "@salone4DAdmin"
 # ChateChat Auto-Responder Bot Settings
 # ==========================================
 CHATECHAT_BOT_TOKEN = os.getenv("CHATECHAT_BOT_TOKEN", "")
+if not CHATECHAT_BOT_TOKEN:
+    _tf = os.path.join(os.path.dirname(__file__), "data", "chatechat_token.txt")
+    if os.path.exists(_tf):
+        try:
+            with open(_tf, "r", encoding="utf-8") as _f:
+                CHATECHAT_BOT_TOKEN = _f.read().strip()
+        except Exception:
+            pass
 CHATECHAT_BOT_USERNAME = os.getenv("CHATECHAT_BOT_USERNAME", "@chatechatbot")
 CHATECHAT_APK_URL = os.getenv("CHATECHAT_APK_URL", "https://tinyurl.com/chatechat-app")
 CHATECHAT_WEBAPP_URL = os.getenv("CHATECHAT_WEBAPP_URL", "https://chatechat.onrender.com")

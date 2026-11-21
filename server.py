@@ -241,7 +241,52 @@ def run_bot():
 
 
 
-# -------- ChateChat Auto-Responder Bot ----------
+# -------- ChateChat Auto-Responder Bot & Webhook Relay ----------
+DEBUG_WEBHOOK_LOGS = []
+
+def record_debug_log(category, detail):
+    try:
+        DEBUG_WEBHOOK_LOGS.append({
+            "time": datetime.now(MYANMAR_TZ).strftime("%H:%M:%S"),
+            "category": category,
+            "detail": detail
+        })
+        if len(DEBUG_WEBHOOK_LOGS) > 40:
+            DEBUG_WEBHOOK_LOGS.pop(0)
+    except Exception:
+        pass
+
+def get_chatechat_token():
+    t = getattr(config, "CHATECHAT_BOT_TOKEN", None) or os.getenv("CHATECHAT_BOT_TOKEN", "")
+    if t:
+        return t.strip()
+    token_file = os.path.join("data", "chatechat_token.txt")
+    if os.path.exists(token_file):
+        try:
+            with open(token_file, "r", encoding="utf-8") as f:
+                saved = f.read().strip()
+                if saved:
+                    os.environ["CHATECHAT_BOT_TOKEN"] = saved
+                    setattr(config, "CHATECHAT_BOT_TOKEN", saved)
+                    return saved
+        except Exception:
+            pass
+    return ""
+
+def set_chatechat_token(token_val):
+    if not token_val:
+        return
+    token_val = token_val.strip()
+    os.environ["CHATECHAT_BOT_TOKEN"] = token_val
+    setattr(config, "CHATECHAT_BOT_TOKEN", token_val)
+    try:
+        os.makedirs("data", exist_ok=True)
+        with open(os.path.join("data", "chatechat_token.txt"), "w", encoding="utf-8") as f:
+            f.write(token_val)
+    except Exception as e:
+        logger.warning(f"Could not save chatechat token to disk: {e}")
+
+
 def sync_to_chatechat_inbox(chat_id, text, bot_name="ChateChat AI"):
     """Sync bot reply to ChateChat Inbox in real-time via Webhook API"""
     def _post():
@@ -252,17 +297,21 @@ def sync_to_chatechat_inbox(chat_id, text, bot_name="ChateChat AI"):
                 "text": text,
                 "botName": bot_name
             }
-            res = req.post(url, json=payload, timeout=5)
+            res = req.post(url, json=payload, timeout=8)
+            record_debug_log("chatechat_inbox_sync", {"chat_id": chat_id, "status": res.status_code})
             logger.info(f"ChateChat inbox sync status for chat {chat_id}: {res.status_code}")
         except Exception as e:
+            record_debug_log("chatechat_inbox_sync_err", {"chat_id": chat_id, "error": str(e)})
             logger.warning(f"ChateChat inbox sync error: {e}")
 
     threading.Thread(target=_post, daemon=True).start()
 
 
 def chatechat_send(chat_id, text, reply_markup=None):
-    token = getattr(config, "CHATECHAT_BOT_TOKEN", None) or os.getenv("CHATECHAT_BOT_TOKEN", "")
+    token = get_chatechat_token()
     if not token:
+        logger.error("❌ CHATECHAT_BOT_TOKEN is missing!")
+        record_debug_log("send_error", "CHATECHAT_BOT_TOKEN is missing")
         return False
     payload = {
         "chat_id": chat_id,
@@ -271,13 +320,30 @@ def chatechat_send(chat_id, text, reply_markup=None):
         "disable_web_page_preview": True
     }
     if reply_markup:
-        payload["reply_markup"] = json.dumps(reply_markup)
+        payload["reply_markup"] = reply_markup
     try:
-        r = req.post(f"https://api.telegram.org/bot{token}/sendMessage", json=payload, timeout=10)
-        # Real-time sync to ChateChat Inbox
-        sync_to_chatechat_inbox(chat_id, text)
-        return r.json().get("ok", False)
+        r = req.post(f"https://api.telegram.org/bot{token}/sendMessage", json=payload, timeout=12)
+        res_data = r.json()
+
+        # If Markdown parsing fails (e.g. unescaped symbols), retry with plain text
+        if not res_data.get("ok"):
+            err_desc = res_data.get("description", "")
+            logger.warning(f"Telegram sendMessage with Markdown failed: {err_desc}. Retrying plain text...")
+            payload.pop("parse_mode", None)
+            r = req.post(f"https://api.telegram.org/bot{token}/sendMessage", json=payload, timeout=12)
+            res_data = r.json()
+
+        ok = res_data.get("ok", False)
+        if ok:
+            record_debug_log("send_ok", {"chat_id": chat_id, "text": text[:35]})
+            # Real-time sync to ChateChat Inbox
+            sync_to_chatechat_inbox(chat_id, text)
+        else:
+            record_debug_log("send_failed", {"chat_id": chat_id, "error": res_data})
+            logger.error(f"Telegram sendMessage failed: {res_data}")
+        return ok
     except Exception as e:
+        record_debug_log("send_exception", {"chat_id": chat_id, "error": str(e)})
         logger.error(f"chatechat_send error: {e}")
         return False
 
@@ -307,7 +373,7 @@ def _process_chatechat_message(chat_id, user_text):
     kb = get_chatechat_kb()
     welcome = get_chatechat_welcome_msg()
 
-    t_lower = user_text.lower()
+    t_lower = user_text.lower().strip()
     # Commands or direct download keywords -> instant welcome & download links
     if t_lower in ("/start", "/help", "/download", "/apk", "/app", "/webapp") or \
        any(k in t_lower for k in ["apk", "app", "download", "ဒေါင်း", "လင့်", "လင့်", "down"]):
@@ -327,40 +393,135 @@ def _process_chatechat_message(chat_id, user_text):
             chatechat_send(chat_id, welcome, reply_markup=kb)
 
 
-# -------- ChateChat Dedicated Webhook Relay Route ----------
-@app.route("/webhook/chatechat", methods=["POST", "GET"])
-def chatechat_webhook():
-    if request.method == "GET":
-        return jsonify({"service": "chatechat_webhook", "status": "active"}), 200
+def extract_update_info(data):
+    """
+    Extracts (chat_id, user_text) from any Telegram update or ChateChat Webhook Relay format.
+    Handles standard Telegram payloads, ChateChat normalized JSON, nested wrappers, and callback queries.
+    """
+    if not isinstance(data, dict):
+        return None, None
 
+    # 1. Direct ChateChat relay fields: chatId, text
+    chat_id = data.get("chatId") or data.get("chat_id")
+    text = data.get("text") or data.get("message_text") or data.get("content")
+
+    # 2. Standard Telegram message / edited_message / channel_post
+    for k in ("message", "edited_message", "channel_post"):
+        m = data.get(k)
+        if isinstance(m, dict):
+            if not text:
+                text = m.get("text") or m.get("caption")
+            if not chat_id:
+                chat = m.get("chat")
+                if isinstance(chat, dict):
+                    chat_id = chat.get("id")
+                frm = m.get("from")
+                if not chat_id and isinstance(frm, dict):
+                    chat_id = frm.get("id")
+            if chat_id and text:
+                return str(chat_id), str(text).strip()
+
+    # 3. Telegram callback_query (inline button clicks)
+    cb = data.get("callback_query")
+    if isinstance(cb, dict):
+        if not text:
+            text = cb.get("data")
+        if not chat_id:
+            m = cb.get("message")
+            if isinstance(m, dict) and isinstance(m.get("chat"), dict):
+                chat_id = m.get("chat", {}).get("id")
+            frm = cb.get("from")
+            if not chat_id and isinstance(frm, dict):
+                chat_id = frm.get("id")
+        if chat_id and text:
+            return str(chat_id), str(text).strip()
+
+    # 4. Nested under 'update', 'data', 'payload', 'body'
+    for wrapper in ("update", "data", "payload", "body"):
+        sub = data.get(wrapper)
+        if isinstance(sub, dict):
+            c, t = extract_update_info(sub)
+            if c and t:
+                return c, t
+
+    if chat_id and text:
+        return str(chat_id), str(text).strip()
+
+    return None, None
+
+
+def _handle_incoming_webhook(endpoint_name):
     try:
-        u = request.get_json(force=True, silent=True) or {}
+        u = request.get_json(force=True, silent=True)
+        if not u and request.form:
+            u = request.form.to_dict()
         if not u:
-            return "OK", 200
+            raw = request.get_data(as_text=True)
+            if raw:
+                try:
+                    u = json.loads(raw)
+                except Exception:
+                    pass
+        u = u or {}
 
-        msg = u.get("message", {})
-        if msg and msg.get("text"):
-            chat_id = msg.get("chat", {}).get("id")
-            user_text = msg.get("text", "").strip()
-            if chat_id and user_text:
-                threading.Thread(target=_process_chatechat_message, args=(chat_id, user_text), daemon=True).start()
+        record_debug_log("incoming_webhook", {
+            "endpoint": endpoint_name,
+            "raw_keys": list(u.keys()) if isinstance(u, dict) else str(type(u)),
+            "summary": str(u)[:160]
+        })
+
+        chat_id, user_text = extract_update_info(u)
+        if chat_id and user_text:
+            logger.info(f"Incoming update on {endpoint_name} from {chat_id}: {user_text[:30]}")
+            record_debug_log("processed_message", {"endpoint": endpoint_name, "chat_id": chat_id, "text": user_text[:30]})
+            threading.Thread(target=_process_chatechat_message, args=(chat_id, user_text), daemon=True).start()
+            return "OK", 200
+        else:
+            record_debug_log("ignored_webhook", {"endpoint": endpoint_name, "data": str(u)[:120]})
     except Exception as e:
-        logger.error(f"ChateChat webhook error: {e}")
+        record_debug_log("webhook_error", {"endpoint": endpoint_name, "error": str(e)})
+        logger.error(f"Webhook {endpoint_name} error: {e}")
 
     return "OK", 200
 
 
+@app.route("/webhook/chatechat", methods=["POST", "GET"])
+def chatechat_webhook():
+    if request.method == "GET":
+        return jsonify({"service": "chatechat_webhook", "status": "active"}), 200
+    return _handle_incoming_webhook("webhook_chatechat")
+
+
+@app.route("/webhook", methods=["POST", "GET"])
+def webhook():
+    if request.method == "GET":
+        return jsonify({"service": "webhook", "status": "active"}), 200
+    return _handle_incoming_webhook("webhook_root")
+
+
+@app.route("/webhook/debug", methods=["GET"])
+def webhook_debug():
+    token = get_chatechat_token()
+    token_suffix = token[-6:] if token else "None"
+    return jsonify({
+        "status": "ok",
+        "token_configured": bool(token),
+        "token_suffix": token_suffix,
+        "logs_count": len(DEBUG_WEBHOOK_LOGS),
+        "logs": DEBUG_WEBHOOK_LOGS
+    }), 200
+
+
 def run_chatechat_bot():
-    """ChateChat Auto-Responder polling thread using lightweight REST calls"""
+    """ChateChat Auto-Responder polling fallback thread"""
     import time
     last_id = 0
 
     logger.info("🤖 Starting ChateChat Auto-Responder service...")
-
     commands_set = False
 
     while True:
-        token = getattr(config, "CHATECHAT_BOT_TOKEN", None) or os.getenv("CHATECHAT_BOT_TOKEN", "")
+        token = get_chatechat_token()
         if not token:
             time.sleep(10)
             continue
@@ -396,12 +557,10 @@ def run_chatechat_bot():
                 if msg and msg.get("text"):
                     chat_id = msg["chat"]["id"]
                     user_text = msg["text"].strip()
-                    logger.info(f"ChateChat received from {chat_id}: {user_text[:30]}")
+                    logger.info(f"ChateChat polling received from {chat_id}: {user_text[:30]}")
                     _process_chatechat_message(chat_id, user_text)
         except Exception as e:
-            logger.error(f"ChateChat polling: {e}")
             time.sleep(5)
-
 
 
 @app.route("/trigger/test", methods=["POST"])
@@ -416,27 +575,6 @@ def trig_test():
             logger.error(f"Test failed: {e}", exc_info=True)
     threading.Thread(target=_test, daemon=True).start()
     return jsonify({"status": "ok", "job": "test"})
-
-# -------- Webhook ----------
-@app.route("/webhook", methods=["POST"])
-def webhook():
-    try:
-        u = request.get_json(force=True)
-        if not u:
-            return "OK", 200
-        msg = u.get("message", {})
-        cb = u.get("callback_query", {})
-        if cb:
-            handle_cb(cb["message"]["chat"]["id"], cb["message"]["message_id"], cb["id"], cb["data"])
-        elif msg and msg.get("text"):
-            t = msg["text"].strip()
-            if t.startswith("/"):
-                handle_start(msg["chat"]["id"])
-            else:
-                handle_text(msg["chat"]["id"], t)
-    except Exception:
-        pass
-    return "OK", 200
 
 
 # -------- Scheduler ----------
@@ -508,11 +646,12 @@ def schedule_winner_check(result_data: dict, delay_seconds: int = 300):
 
 @app.route("/")
 def index():
-    has_cc = bool(getattr(config, "CHATECHAT_BOT_TOKEN", None) or os.getenv("CHATECHAT_BOT_TOKEN", ""))
+    cc_token = get_chatechat_token()
     return jsonify({
         "status": "running",
         "bot": config.CHANNEL_ID,
-        "chatechat_configured": has_cc,
+        "chatechat_configured": bool(cc_token),
+        "chatechat_token_suffix": cc_token[-6:] if cc_token else "None",
         "time": datetime.now(MYANMAR_TZ).isoformat(),
         "scheduled_posts": {"hot_numbers": config.POST_TIME,
             "draw_check": f"{config.RESULT_CHECK_INTERVAL_MINS} mins (5:45-7PM Wed/Sat/Sun)"}})
@@ -559,12 +698,12 @@ def config_chatechat():
         data = request.get_json(force=True, silent=True) or {}
         new_token = data.get("token") or request.args.get("token")
         if new_token:
-            os.environ["CHATECHAT_BOT_TOKEN"] = new_token
-            setattr(config, "CHATECHAT_BOT_TOKEN", new_token)
+            set_chatechat_token(new_token)
             return jsonify({"status": "ok", "message": "CHATECHAT_BOT_TOKEN configured successfully"}), 200
         return jsonify({"status": "error", "message": "Missing token parameter"}), 400
-    has_token = bool(getattr(config, "CHATECHAT_BOT_TOKEN", None) or os.getenv("CHATECHAT_BOT_TOKEN", ""))
-    return jsonify({"service": "chatechat", "configured": has_token})
+    token = get_chatechat_token()
+    token_suffix = token[-6:] if token else "None"
+    return jsonify({"service": "chatechat", "configured": bool(token), "token_suffix": token_suffix})
 
 
 # ---- Startup: run at module level (gunicorn imports this) ----
