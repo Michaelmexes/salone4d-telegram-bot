@@ -142,8 +142,8 @@ HTML_DASHBOARD = """
                 <span class="info-value">{{ channel }}</span>
             </div>
             <div class="info-row">
-                <span class="info-label">AI Engine</span>
-                <span class="info-value">OpenRouter Free Models</span>
+                <span class="info-label">Customer Bot</span>
+                <span class="info-value">Salone4D & ChateChat</span>
             </div>
             <div class="info-row">
                 <span class="info-label">Myanmar Time</span>
@@ -180,6 +180,7 @@ def health():
         "status": "ok",
         "service": "salone4d-bot",
         "channel": getattr(config, "CHANNEL_ID", "@salone4d"),
+        "bots": ["@Salone4dOfficialBot", getattr(config, "CHATECHAT_BOT_USERNAME", "@chatechatbot")],
         "myanmar_time": now_mm,
         "keep_alive": True,
         "timestamp": int(time.time())
@@ -276,6 +277,20 @@ def run_customer_bot():
         logger.error(f"❌ Customer Bot crashed: {e}", exc_info=True)
 
 
+def run_chatechat_bot():
+    """Run ChateChat Telegram Auto-Responder Bot."""
+    try:
+        token = getattr(config, "CHATECHAT_BOT_TOKEN", None)
+        if not token:
+            logger.info("ℹ️ ChateChat bot token not configured. Skipping.")
+            return
+        import chatechat_bot
+        logger.info("🤖 Starting ChateChat Auto-Responder Bot (@chatechatbot)...")
+        chatechat_bot.main()
+    except Exception as e:
+        logger.error(f"❌ ChateChat Bot crashed: {e}", exc_info=True)
+
+
 def main():
     mode = os.getenv("RUN_MODE", "all").lower()
     port = int(os.getenv("PORT", getattr(config, "PORT", 10000)))
@@ -300,7 +315,12 @@ def main():
         sched_thread = threading.Thread(target=run_scheduler_job, daemon=True)
         sched_thread.start()
 
-    # 4. Start Customer Service Bot if mode is 'all' or 'bot'
+    # 4. Start ChateChat Auto-Responder Bot in background thread
+    if mode in ("all", "bot"):
+        chatechat_thread = threading.Thread(target=run_chatechat_bot, daemon=True)
+        chatechat_thread.start()
+
+    # 5. Start Customer Service Bot if mode is 'all' or 'bot'
     if mode in ("all", "bot"):
         # Run bot on the main thread (runs asyncio event loop)
         run_customer_bot()

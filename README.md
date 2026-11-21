@@ -12,7 +12,8 @@ Salone4dTelegramPost/
 ├── app.py               ← 🚀  Unified Runner for Render (Web Health + Bot + Scheduler)
 ├── render.yaml          ← 🌐  Render Blueprint configuration
 ├── config.py            ← ⚙️  Token, OpenRouter & Settings
-├── customer_bot.py      ← 💬  24/7 Customer Service Bot (DeepSeek AI Auto-Reply)
+├── customer_bot.py      ← 💬  24/7 Customer Service Bot (Salone4D AI Auto-Reply)
+├── chatechat_bot.py     ← 📲  ChateChat Auto-Responder Bot (APK & Web App Links)
 ├── memory_manager.py    ← 🧠  Multi-turn Conversation Memory manager
 ├── openrouter_client.py ← 🤖  OpenRouter AI Client (DeepSeek V4 Flash)
 ├── keyboards.py         ← 🔘  Inline keyboard menu builder
