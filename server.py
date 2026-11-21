@@ -512,10 +512,38 @@ def webhook_debug():
     }), 200
 
 
+def ensure_chatechat_relay():
+    """Keeps ChateChat Webhook Relay connected and healthy automatically"""
+    token = get_chatechat_token()
+    if not token:
+        return
+    try:
+        status_url = "https://chatechat.onrender.com/api/v1/webhooks/telegram/status"
+        res = req.get(status_url, timeout=8)
+        if res.status_code == 200:
+            st = res.json()
+            target_forward = "https://salone4d-telegram-bot.onrender.com/webhook/chatechat"
+            if not st.get("isActive") or st.get("forwardWebhookUrl") != target_forward:
+                logger.info("ChateChat relay not active or forward URL missing. Auto-connecting...")
+                connect_url = "https://chatechat.onrender.com/api/v1/webhooks/connect/telegram"
+                payload = {
+                    "botToken": token,
+                    "forwardWebhookUrl": target_forward,
+                    "mode": "WEBHOOK_RELAY",
+                    "organizationId": "org_royal"
+                }
+                c_res = req.post(connect_url, json=payload, timeout=12)
+                logger.info(f"ChateChat auto-heal connect status: {c_res.status_code}")
+                record_debug_log("chatechat_auto_heal", {"status": c_res.status_code})
+    except Exception as e:
+        logger.warning(f"ChateChat keep-alive check: {e}")
+
+
 def run_chatechat_bot():
-    """ChateChat Auto-Responder polling fallback thread"""
+    """ChateChat Auto-Responder polling fallback & relay health thread"""
     import time
     last_id = 0
+    last_health_check = 0
 
     logger.info("🤖 Starting ChateChat Auto-Responder service...")
     commands_set = False
@@ -525,6 +553,12 @@ def run_chatechat_bot():
         if not token:
             time.sleep(10)
             continue
+
+        # Periodically ensure ChateChat platform Webhook Relay is connected & active
+        now = time.time()
+        if now - last_health_check > 60:
+            last_health_check = now
+            threading.Thread(target=ensure_chatechat_relay, daemon=True).start()
 
         if not commands_set:
             try:
