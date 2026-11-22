@@ -368,27 +368,32 @@ def get_chatechat_welcome_msg():
 
 def _process_chatechat_message(chat_id, user_text):
     """Processes user message for ChateChat (shared by Polling & Webhook Relay)"""
-    kb = get_chatechat_kb()
-    welcome = get_chatechat_welcome_msg()
+    try:
+        record_debug_log("processing_start", {"chat_id": chat_id, "user_text": user_text})
+        kb = get_chatechat_kb()
+        welcome = get_chatechat_welcome_msg()
 
-    t_lower = user_text.lower().strip()
-    # Commands or direct download keywords -> instant welcome & download links
-    if t_lower in ("/start", "/help", "/download", "/apk", "/app", "/webapp") or \
-       any(k in t_lower for k in ["apk", "app", "download", "ဒေါင်း", "လင့်", "လင့်", "down"]):
-        chatechat_send(chat_id, welcome, reply_markup=kb)
-    else:
-        # Simple questions -> ChateChat AI auto-reply
-        ai_reply = ""
-        try:
-            import openrouter_client
-            ai_reply = openrouter_client.get_chatechat_ai_reply(user_text)
-        except Exception as e:
-            logger.error(f"ChateChat AI error: {e}")
-
-        if ai_reply:
-            chatechat_send(chat_id, ai_reply, reply_markup=kb)
-        else:
+        t_lower = user_text.lower().strip()
+        # Commands or direct download keywords -> instant welcome & download links
+        if t_lower in ("/start", "/help", "/download", "/apk", "/app", "/webapp") or \
+           any(k in t_lower for k in ["apk", "app", "download", "ဒေါင်း", "လင့်", "လင့်", "down"]):
             chatechat_send(chat_id, welcome, reply_markup=kb)
+        else:
+            # Simple questions -> ChateChat AI auto-reply
+            ai_reply = ""
+            try:
+                import openrouter_client
+                ai_reply = openrouter_client.get_chatechat_ai_reply(user_text)
+            except Exception as e:
+                logger.error(f"ChateChat AI error: {e}")
+
+            if ai_reply:
+                chatechat_send(chat_id, ai_reply, reply_markup=kb)
+            else:
+                chatechat_send(chat_id, welcome, reply_markup=kb)
+    except Exception as e:
+        record_debug_log("processing_err", {"chat_id": chat_id, "error": str(e)})
+        logger.error(f"_process_chatechat_message error: {e}", exc_info=True)
 
 
 def extract_update_info(data):
