@@ -600,8 +600,12 @@ def run_chatechat_bot():
             time.sleep(5)
 
 
-@app.route("/trigger/test", methods=["POST"])
-def trig_test():
+@app.route("/test/chatechat_send")
+def test_cc_send():
+    kb = get_chatechat_kb()
+    welcome = get_chatechat_welcome_msg()
+    res = chatechat_send("1670935260", welcome, reply_markup=kb)
+    return jsonify({"result": res, "token_configured": bool(get_chatechat_token()), "logs": DEBUG_WEBHOOK_LOGS})
     """Test: manually run hot numbers pipeline and post to channel"""
     def _test():
         logger.info("Manual test trigger: running hot numbers pipeline...")
