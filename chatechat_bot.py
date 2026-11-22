@@ -64,17 +64,12 @@ def build_welcome_message() -> str:
     apk_url = getattr(config, "CHATECHAT_APK_URL", "https://tinyurl.com/chatechat-app")
     webapp_url = getattr(config, "CHATECHAT_WEBAPP_URL", "https://chatechat.onrender.com")
 
-    message = (
-        "💬 *ChateChat မှ ကြိုဆိုပါသည်!* ✨\n"
-        "───────────────────────\n\n"
-        "မင်္ဂလာပါခင်ဗျာ... ChateChat ကို အသုံးပြုရန်အတွက် အောက်ပါ Link များမှတစ်ဆင့် Android Application (သို့မဟုတ်) Web App ကို အလွယ်တကူ ဝင်ရောက်အသုံးပြုနိုင်ပါသည် 👇\n\n"
-        "📲 *Android APK ဒေါင်းလုဒ် ရယူရန်:*\n"
-        f"👉 {apk_url}\n\n"
-        "🌐 *Web App တိုက်ရိုက် အသုံးပြုရန်:*\n"
-        f"👉 {webapp_url}\n\n"
-        "အောက်ပါ ခလုတ်များကို နှိပ်၍လည်း တိုက်ရိုက် ဒေါင်းလုဒ်ရယူခြင်း (သို့) Web App ဖွင့်လှစ်ခြင်းများ ပြုလုပ်နိုင်ပါသည်ခင်ဗျာ 👇"
+    return (
+        "မင်္ဂလာပါခင်ဗျာ 🙏 ChateChat (ချိတ်ချက်) မှ ကြိုဆိုပါသည်။\n\n"
+        f"📲 Android App (APK):\n{apk_url}\n\n"
+        f"🌐 Web Dashboard:\n{webapp_url}\n\n"
+        "စတင်အသုံးပြုရန် အောက်ပါခလုတ်ကို နှိပ်၍လည်း တိုက်ရိုက်ရယူနိုင်ပါသည်။ 👇"
     )
-    return message
 
 
 def sync_to_chatechat_inbox(chat_id, text, bot_name="ChateChat AI"):

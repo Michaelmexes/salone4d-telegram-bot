@@ -357,15 +357,13 @@ def get_chatechat_kb():
     }
 
 def get_chatechat_welcome_msg():
+    apk_url = getattr(config, "CHATECHAT_APK_URL", "https://tinyurl.com/chatechat-app")
+    webapp_url = getattr(config, "CHATECHAT_WEBAPP_URL", "https://chatechat.onrender.com")
     return (
-        "💬 *ChateChat မှ ကြိုဆိုပါသည်!* ✨\n"
-        "───────────────────────\n\n"
-        "မင်္ဂလာပါခင်ဗျာ... ChateChat ကို အသုံးပြုရန်အတွက် အောက်ပါ Link များမှတစ်ဆင့် Android Application (သို့မဟုတ်) Web App ကို အလွယ်တကူ ဝင်ရောက်အသုံးပြုနိုင်ပါသည် 👇\n\n"
-        "📲 *Android APK ဒေါင်းလုဒ် ရယူရန်:*\n"
-        f"👉 {getattr(config, 'CHATECHAT_APK_URL', 'https://tinyurl.com/chatechat-app')}\n\n"
-        "🌐 *Web App တိုက်ရိုက် အသုံးပြုရန်:*\n"
-        f"👉 {getattr(config, 'CHATECHAT_WEBAPP_URL', 'https://chatechat.onrender.com')}\n\n"
-        "အောက်ပါ ခလုတ်များကို နှိပ်၍လည်း တိုက်ရိုက် ရယူနိုင်ပါသည်ခင်ဗျာ 👇"
+        "မင်္ဂလာပါခင်ဗျာ 🙏 ChateChat (ချိတ်ချက်) မှ ကြိုဆိုပါသည်။\n\n"
+        f"📲 Android App (APK):\n{apk_url}\n\n"
+        f"🌐 Web Dashboard:\n{webapp_url}\n\n"
+        "စတင်အသုံးပြုရန် အောက်ပါခလုတ်ကို နှိပ်၍လည်း တိုက်ရိုက်ရယူနိုင်ပါသည်။ 👇"
     )
 
 def _process_chatechat_message(chat_id, user_text):
