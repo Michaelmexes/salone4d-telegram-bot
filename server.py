@@ -537,58 +537,57 @@ def _process_salone4d_update(u):
         if not isinstance(u, dict):
             return
 
+        # Check for nested wrapper payloads
         if "update" in u and isinstance(u["update"], dict):
             u = u["update"]
         elif "payload" in u and isinstance(u["payload"], dict):
             u = u["payload"]
 
+        # 1. Handle callback_query (inline button clicks)
         cb = u.get("callback_query")
-        msg = u.get("message") or u.get("edited_message")
-
-        if cb:
+        if cb and isinstance(cb, dict):
             chat_id = cb.get("message", {}).get("chat", {}).get("id")
             msg_id = cb.get("message", {}).get("message_id")
             cb_id = cb.get("id")
             data = cb.get("data")
             if chat_id and cb_id:
                 handle_cb(chat_id, msg_id, cb_id, data)
-            return
-
-        if msg:
-            chat_id = msg.get("chat", {}).get("id")
-            if not chat_id:
                 return
 
-            # Photo or document (slip) -> Handover
+        # 2. Handle photo or document (payment slip) -> Handover
+        msg = u.get("message") or u.get("edited_message")
+        if isinstance(msg, dict):
+            chat_id = msg.get("chat", {}).get("id")
             if msg.get("photo") or msg.get("document"):
                 handover_msg = getattr(
                     config,
                     "HANDOVER_MESSAGE",
                     "ဟုတ်ကဲ့ခင်ဗျာ၊ ခေတ္တစောင့်ဆိုင်းပေးပါရှင်/ခင်ဗျာ။ လူကြီးမင်းအား အသေးစိတ် ကူညီဖြေကြားပေးနိုင်ရန် တာဝန်ကျ ဆိုင်ဝန်ထမ်း (Human Agent) ထံသို့ အကြောင်းကြား လွှဲပြောင်းပေးထားပါပြီခင်ဗျာ။ 👨‍💼"
                 )
-                tg_send(chat_id, handover_msg)
+                if chat_id:
+                    tg_send(chat_id, handover_msg)
                 return
 
-            text = msg.get("text") or msg.get("caption") or ""
-            text = text.strip()
-            if not text:
-                return
+        # 3. Universal extract of chat_id and user_text
+        chat_id, text = extract_update_info(u)
+        if not chat_id or not text:
+            return
 
-            cmd = text.split()[0].lower() if text.startswith("/") else ""
-            if cmd == "/start":
-                handle_start(chat_id)
-            elif cmd == "/applink":
-                handle_applink(chat_id)
-            elif cmd == "/appguide":
-                handle_appguide(chat_id)
-            elif cmd == "/support":
-                handle_support(chat_id)
-            elif cmd in ("/reset", "/newchat"):
-                handle_reset(chat_id)
-            elif text.startswith("/"):
-                handle_start(chat_id)
-            else:
-                handle_text(chat_id, text)
+        cmd = text.split()[0].lower() if text.startswith("/") else ""
+        if cmd == "/start":
+            handle_start(chat_id)
+        elif cmd == "/applink":
+            handle_applink(chat_id)
+        elif cmd == "/appguide":
+            handle_appguide(chat_id)
+        elif cmd == "/support":
+            handle_support(chat_id)
+        elif cmd in ("/reset", "/newchat"):
+            handle_reset(chat_id)
+        elif text.startswith("/"):
+            handle_start(chat_id)
+        else:
+            handle_text(chat_id, text)
     except Exception as e:
         logger.error(f"_process_salone4d_update error: {e}")
 
@@ -651,8 +650,9 @@ def chatechat_webhook():
 @app.route("/webhook", methods=["POST", "GET"])
 def webhook():
     if request.method == "GET":
-        return jsonify({"service": "webhook", "status": "active"}), 200
-    return _handle_incoming_webhook("webhook_root")
+        return jsonify({"service": "salone4d_webhook", "status": "active"}), 200
+    # Root webhook routes to Salone4D bot so incoming updates are always answered by Salone4D
+    return salone4d_webhook()
 
 
 @app.route("/webhook/debug", methods=["GET"])
@@ -668,38 +668,10 @@ def webhook_debug():
     }), 200
 
 
-def ensure_chatechat_relay():
-    """Keeps ChateChat Webhook Relay connected and healthy automatically"""
-    token = get_chatechat_token()
-    if not token:
-        return
-    try:
-        status_url = "https://chatechat.onrender.com/api/v1/webhooks/telegram/status"
-        res = req.get(status_url, timeout=8)
-        if res.status_code == 200:
-            st = res.json()
-            target_forward = "https://salone4d-telegram-bot.onrender.com/webhook/chatechat"
-            if not st.get("isActive") or st.get("forwardWebhookUrl") != target_forward:
-                logger.info("ChateChat relay not active or forward URL missing. Auto-connecting...")
-                connect_url = "https://chatechat.onrender.com/api/v1/webhooks/connect/telegram"
-                payload = {
-                    "botToken": token,
-                    "forwardWebhookUrl": target_forward,
-                    "mode": "WEBHOOK_RELAY",
-                    "organizationId": "org_royal"
-                }
-                c_res = req.post(connect_url, json=payload, timeout=12)
-                logger.info(f"ChateChat auto-heal connect status: {c_res.status_code}")
-                record_debug_log("chatechat_auto_heal", {"status": c_res.status_code})
-    except Exception as e:
-        logger.warning(f"ChateChat keep-alive check: {e}")
-
-
 def run_chatechat_bot():
-    """ChateChat Auto-Responder polling fallback & relay health thread"""
+    """ChateChat Auto-Responder polling fallback thread (uses CHATECHAT_BOT_TOKEN)"""
     import time
     last_id = 0
-    last_health_check = 0
 
     logger.info("🤖 Starting ChateChat Auto-Responder service...")
     commands_set = False
@@ -709,12 +681,6 @@ def run_chatechat_bot():
         if not token:
             time.sleep(10)
             continue
-
-        # Periodically ensure ChateChat platform Webhook Relay is connected & active
-        now = time.time()
-        if now - last_health_check > 60:
-            last_health_check = now
-            threading.Thread(target=ensure_chatechat_relay, daemon=True).start()
 
         if not commands_set:
             try:
