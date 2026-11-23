@@ -33,6 +33,55 @@ DRAW_WEEKDAYS = {2, 5, 6}
 LAST_POSTED_DRAW_FILE = "data/last_posted_draw.txt"
 
 
+# -------- Debug & ChateChat Sync Helpers ----------
+DEBUG_WEBHOOK_LOGS = []
+
+def record_debug_log(category, detail):
+    try:
+        DEBUG_WEBHOOK_LOGS.append({
+            "time": datetime.now(MYANMAR_TZ).strftime("%H:%M:%S"),
+            "category": category,
+            "detail": detail
+        })
+        if len(DEBUG_WEBHOOK_LOGS) > 40:
+            DEBUG_WEBHOOK_LOGS.pop(0)
+    except Exception:
+        pass
+
+def sync_to_chatechat_inbox(chat_id, text, bot_name="ChateChat AI"):
+    """Sync bot reply to ChateChat Inbox in real-time via Webhook API"""
+    def _post():
+        try:
+            url = getattr(config, "CHATECHAT_BOT_REPLY_URL", "https://chatechat.onrender.com/api/v1/webhooks/telegram/bot-reply")
+            payload = {
+                "chatId": str(chat_id),
+                "text": text,
+                "botName": bot_name
+            }
+            res = req.post(url, json=payload, timeout=8)
+            record_debug_log("chatechat_inbox_sync", {"chat_id": chat_id, "status": res.status_code, "bot": bot_name})
+            logger.info(f"ChateChat inbox sync status for chat {chat_id} ({bot_name}): {res.status_code}")
+        except Exception as e:
+            record_debug_log("chatechat_inbox_sync_err", {"chat_id": chat_id, "error": str(e)})
+            logger.warning(f"ChateChat inbox sync error: {e}")
+
+    threading.Thread(target=_post, daemon=True).start()
+
+def check_human_handover(text: str) -> bool:
+    """Check if the user is asking for human staff, reporting an issue, or sending a slip."""
+    if not text:
+        return False
+    t = text.lower().strip()
+    keywords = getattr(config, "HANDOVER_KEYWORDS", [
+        "လူနဲ့ ပြောချင်တယ်", "လူနဲ့ပြောချင်", "လူနဲ့ပြော", "လူနဲ့စကားပြော",
+        "agent ခေါ်ပေးပါ", "agent နဲ့", "agent ခေါ်", "agent",
+        "ဝန်ထမ်းနဲ့ တွေ့ချင်တယ်", "ဝန်ထမ်းနဲ့", "ဝန်ထမ်းခေါ်", "ဝန်ထမ်း",
+        "အကူအညီလိုတယ်", "အကူအညီပေးပါ", "အကူအညီ", "ပြဿနာတက်",
+        "စလစ်", "ငွေမဝင်", "ငွေမရောက်", "လိမ်တယ်", "လိမ်", "human", "admin"
+    ])
+    return any(k.lower() in t for k in keywords)
+
+
 # -------- Telegram REST helpers ----------
 def tg_send(chat_id, text, parse_mode="HTML", reply_markup=None):
     payload = {"chat_id": chat_id, "text": text, "parse_mode": parse_mode, "disable_web_page_preview": True}
@@ -40,7 +89,16 @@ def tg_send(chat_id, text, parse_mode="HTML", reply_markup=None):
         payload["reply_markup"] = json.dumps(reply_markup)
     try:
         r = req.post(f"https://api.telegram.org/bot{config.BOT_TOKEN}/sendMessage", json=payload, timeout=10)
-        return r.json().get("ok", False)
+        res_data = r.json()
+        if not res_data.get("ok") and parse_mode:
+            payload.pop("parse_mode", None)
+            r = req.post(f"https://api.telegram.org/bot{config.BOT_TOKEN}/sendMessage", json=payload, timeout=10)
+            res_data = r.json()
+
+        ok = res_data.get("ok", False)
+        # Sync bot reply to ChateChat Inbox in real-time
+        sync_to_chatechat_inbox(chat_id, text, bot_name="Salone4D AI")
+        return ok
     except Exception as e:
         logger.error(f"tg_send: {e}")
         return False
@@ -159,18 +217,26 @@ def handle_cb(chat_id, msg_id, cb_id, data):
         tg_edit(chat_id, msg_id, TEXTS[data], reply_markup=SUB_KB)
 
 def handle_text(chat_id, text):
-    if config.OPENROUTER_API_KEY:
-        try:
-            import openrouter_client, memory_manager
-            memory_manager.add_message(chat_id, "user", text)
-            history = memory_manager.get_user_history(chat_id)
-            reply = openrouter_client.get_ai_reply(text, history)
-            if reply:
-                memory_manager.add_message(chat_id, "assistant", reply)
-                tg_send(chat_id, reply)
-                return
-        except Exception as e:
-            logger.error(f"OpenRouter: {e}")
+    if check_human_handover(text):
+        handover_msg = getattr(
+            config,
+            "HANDOVER_MESSAGE",
+            "ဟုတ်ကဲ့ခင်ဗျာ၊ ခေတ္တစောင့်ဆိုင်းပေးပါရှင်/ခင်ဗျာ။ လူကြီးမင်းအား အသေးစိတ် ကူညီဖြေကြားပေးနိုင်ရန် တာဝန်ကျ ဆိုင်ဝန်ထမ်း (Human Agent) ထံသို့ အကြောင်းကြား လွှဲပြောင်းပေးထားပါပြီခင်ဗျာ။ 👨‍💼"
+        )
+        tg_send(chat_id, handover_msg)
+        return
+
+    try:
+        import openrouter_client, memory_manager
+        memory_manager.add_message(chat_id, "user", text)
+        history = memory_manager.get_user_history(chat_id)
+        reply = openrouter_client.get_ai_reply(text, history)
+        if reply:
+            memory_manager.add_message(chat_id, "assistant", reply)
+            tg_send(chat_id, reply)
+            return
+    except Exception as e:
+        logger.error(f"OpenRouter: {e}")
     tg_send(chat_id, FALLBACK, reply_markup=MAIN_KB)
 
 
@@ -218,23 +284,35 @@ def run_bot():
                 msg = upd.get("message")
                 if cb:
                     handle_cb(cb["message"]["chat"]["id"], cb["message"]["message_id"], cb["id"], cb["data"])
-                elif msg and msg.get("text"):
-                    t = msg["text"].strip()
-                    cmd = t.split()[0].lower() if t.startswith("/") else ""
-                    if cmd == "/start":
-                        handle_start(msg["chat"]["id"])
-                    elif cmd == "/applink":
-                        handle_applink(msg["chat"]["id"])
-                    elif cmd == "/appguide":
-                        handle_appguide(msg["chat"]["id"])
-                    elif cmd == "/support":
-                        handle_support(msg["chat"]["id"])
-                    elif cmd in ("/reset", "/newchat"):
-                        handle_reset(msg["chat"]["id"])
-                    elif t.startswith("/"):
-                        handle_start(msg["chat"]["id"])
-                    else:
-                        handle_text(msg["chat"]["id"], t)
+                elif msg:
+                    chat_id = msg["chat"]["id"]
+                    # Photo or Document (slip) detection
+                    if msg.get("photo") or msg.get("document"):
+                        handover_msg = getattr(
+                            config,
+                            "HANDOVER_MESSAGE",
+                            "ဟုတ်ကဲ့ခင်ဗျာ၊ ခေတ္တစောင့်ဆိုင်းပေးပါရှင်/ခင်ဗျာ။ လူကြီးမင်းအား အသေးစိတ် ကူညီဖြေကြားပေးနိုင်ရန် တာဝန်ကျ ဆိုင်ဝန်ထမ်း (Human Agent) ထံသို့ အကြောင်းကြား လွှဲပြောင်းပေးထားပါပြီခင်ဗျာ။ 👨‍💼"
+                        )
+                        tg_send(chat_id, handover_msg)
+                        continue
+
+                    if msg.get("text"):
+                        t = msg["text"].strip()
+                        cmd = t.split()[0].lower() if t.startswith("/") else ""
+                        if cmd == "/start":
+                            handle_start(chat_id)
+                        elif cmd == "/applink":
+                            handle_applink(chat_id)
+                        elif cmd == "/appguide":
+                            handle_appguide(chat_id)
+                        elif cmd == "/support":
+                            handle_support(chat_id)
+                        elif cmd in ("/reset", "/newchat"):
+                            handle_reset(chat_id)
+                        elif t.startswith("/"):
+                            handle_start(chat_id)
+                        else:
+                            handle_text(chat_id, t)
         except Exception as e:
             logger.error(f"Polling: {e}")
             time.sleep(5)
@@ -242,20 +320,6 @@ def run_bot():
 
 
 # -------- ChateChat Auto-Responder Bot & Webhook Relay ----------
-DEBUG_WEBHOOK_LOGS = []
-
-def record_debug_log(category, detail):
-    try:
-        DEBUG_WEBHOOK_LOGS.append({
-            "time": datetime.now(MYANMAR_TZ).strftime("%H:%M:%S"),
-            "category": category,
-            "detail": detail
-        })
-        if len(DEBUG_WEBHOOK_LOGS) > 40:
-            DEBUG_WEBHOOK_LOGS.pop(0)
-    except Exception:
-        pass
-
 def get_chatechat_token():
     t = getattr(config, "CHATECHAT_BOT_TOKEN", None) or os.getenv("CHATECHAT_BOT_TOKEN", "")
     if t:
@@ -285,26 +349,6 @@ def set_chatechat_token(token_val):
             f.write(token_val)
     except Exception as e:
         logger.warning(f"Could not save chatechat token to disk: {e}")
-
-
-def sync_to_chatechat_inbox(chat_id, text, bot_name="ChateChat AI"):
-    """Sync bot reply to ChateChat Inbox in real-time via Webhook API"""
-    def _post():
-        try:
-            url = getattr(config, "CHATECHAT_BOT_REPLY_URL", "https://chatechat.onrender.com/api/v1/webhooks/telegram/bot-reply")
-            payload = {
-                "chatId": str(chat_id),
-                "text": text,
-                "botName": bot_name
-            }
-            res = req.post(url, json=payload, timeout=8)
-            record_debug_log("chatechat_inbox_sync", {"chat_id": chat_id, "status": res.status_code})
-            logger.info(f"ChateChat inbox sync status for chat {chat_id}: {res.status_code}")
-        except Exception as e:
-            record_debug_log("chatechat_inbox_sync_err", {"chat_id": chat_id, "error": str(e)})
-            logger.warning(f"ChateChat inbox sync error: {e}")
-
-    threading.Thread(target=_post, daemon=True).start()
 
 
 def chatechat_send(chat_id, text, reply_markup=None):
@@ -486,6 +530,115 @@ def _handle_incoming_webhook(endpoint_name):
         logger.error(f"Webhook {endpoint_name} error: {e}")
 
     return "OK", 200
+
+
+def _process_salone4d_update(u):
+    try:
+        if not isinstance(u, dict):
+            return
+
+        if "update" in u and isinstance(u["update"], dict):
+            u = u["update"]
+        elif "payload" in u and isinstance(u["payload"], dict):
+            u = u["payload"]
+
+        cb = u.get("callback_query")
+        msg = u.get("message") or u.get("edited_message")
+
+        if cb:
+            chat_id = cb.get("message", {}).get("chat", {}).get("id")
+            msg_id = cb.get("message", {}).get("message_id")
+            cb_id = cb.get("id")
+            data = cb.get("data")
+            if chat_id and cb_id:
+                handle_cb(chat_id, msg_id, cb_id, data)
+            return
+
+        if msg:
+            chat_id = msg.get("chat", {}).get("id")
+            if not chat_id:
+                return
+
+            # Photo or document (slip) -> Handover
+            if msg.get("photo") or msg.get("document"):
+                handover_msg = getattr(
+                    config,
+                    "HANDOVER_MESSAGE",
+                    "ဟုတ်ကဲ့ခင်ဗျာ၊ ခေတ္တစောင့်ဆိုင်းပေးပါရှင်/ခင်ဗျာ။ လူကြီးမင်းအား အသေးစိတ် ကူညီဖြေကြားပေးနိုင်ရန် တာဝန်ကျ ဆိုင်ဝန်ထမ်း (Human Agent) ထံသို့ အကြောင်းကြား လွှဲပြောင်းပေးထားပါပြီခင်ဗျာ။ 👨‍💼"
+                )
+                tg_send(chat_id, handover_msg)
+                return
+
+            text = msg.get("text") or msg.get("caption") or ""
+            text = text.strip()
+            if not text:
+                return
+
+            cmd = text.split()[0].lower() if text.startswith("/") else ""
+            if cmd == "/start":
+                handle_start(chat_id)
+            elif cmd == "/applink":
+                handle_applink(chat_id)
+            elif cmd == "/appguide":
+                handle_appguide(chat_id)
+            elif cmd == "/support":
+                handle_support(chat_id)
+            elif cmd in ("/reset", "/newchat"):
+                handle_reset(chat_id)
+            elif text.startswith("/"):
+                handle_start(chat_id)
+            else:
+                handle_text(chat_id, text)
+    except Exception as e:
+        logger.error(f"_process_salone4d_update error: {e}")
+
+
+@app.route("/webhook/salone4d", methods=["POST", "GET"])
+def salone4d_webhook():
+    if request.method == "GET":
+        return jsonify({
+            "service": "salone4d_webhook",
+            "bot": "Salone4dOfficial",
+            "status": "active"
+        }), 200
+
+    try:
+        u = request.get_json(force=True, silent=True)
+        if not u and request.form:
+            u = request.form.to_dict()
+        if not u:
+            raw = request.get_data(as_text=True)
+            if raw:
+                try:
+                    u = json.loads(raw)
+                except Exception:
+                    pass
+        u = u or {}
+
+        record_debug_log("salone4d_webhook", {
+            "keys": list(u.keys()) if isinstance(u, dict) else str(type(u)),
+            "summary": str(u)[:160]
+        })
+
+        threading.Thread(target=_process_salone4d_update, args=(u,), daemon=True).start()
+        return "OK", 200
+    except Exception as e:
+        logger.error(f"salone4d_webhook error: {e}")
+        return "OK", 200
+
+
+@app.route("/test/ai", methods=["GET"])
+def test_ai():
+    q = request.args.get("q", "မင်္ဂလာပါ")
+    import openrouter_client
+    reply = openrouter_client.get_ai_reply(q)
+    return jsonify({
+        "status": "ok",
+        "query": q,
+        "reply": reply,
+        "gemini_configured": bool(getattr(config, "GEMINI_API_KEY", "") or os.getenv("GOOGLE_API_KEY", "")),
+        "openrouter_configured": bool(getattr(config, "OPENROUTER_API_KEY", ""))
+    }), 200
 
 
 @app.route("/webhook/chatechat", methods=["POST", "GET"])

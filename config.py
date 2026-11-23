@@ -68,13 +68,16 @@ PORT = int(os.getenv("PORT", "10000"))
 # OpenRouter & AI Customer Service Settings
 # ==========================================
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")  # OpenRouter API Key (from .env or environment)
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", os.getenv("GOOGLE_API_KEY", ""))
 
 OPENROUTER_MODELS = [
-    "baidu/ernie-5.5-flash-preview:free",
-    "google/gemma-4-26b-a4b-it:free",
-    "google/gemma-4-31b-it:free",
-    "recursive/flint-v1.0:free",
-    "openrouter/free"
+    "openrouter/free",
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "nvidia/nemotron-3.5-lightning:free",
+    "mistralai/mistral-7b-instruct:free",
+    "deepseek/deepseek-r1:free",
+    "qwen/qwen-2.5-72b-instruct:free",
 ]
 
 # Support Contacts & Info
@@ -86,6 +89,21 @@ SUPPORT_VIBER = "+95 9 894 169 717"
 APP_LINK = "https://t.ly/pemBm"
 TELEGRAM_CHANNEL = CHANNEL_ID
 ADMIN_TELEGRAM = "@salone4DAdmin"
+
+# Human Handover Configuration
+HANDOVER_MESSAGE = (
+    "ဟုတ်ကဲ့ခင်ဗျာ၊ ခေတ္တစောင့်ဆိုင်းပေးပါရှင်/ခင်ဗျာ။ "
+    "လူကြီးမင်းအား အသေးစိတ် ကူညီဖြေကြားပေးနိုင်ရန် တာဝန်ကျ ဆိုင်ဝန်ထမ်း (Human Agent) "
+    "ထံသို့ အကြောင်းကြား လွှဲပြောင်းပေးထားပါပြီခင်ဗျာ။ 👨‍💼"
+)
+
+HANDOVER_KEYWORDS = [
+    "လူနဲ့ ပြောချင်တယ်", "လူနဲ့ပြောချင်", "လူနဲ့ပြော", "လူနဲ့စကားပြော",
+    "agent ခေါ်ပေးပါ", "agent နဲ့", "agent ခေါ်", "agent",
+    "ဝန်ထမ်းနဲ့ တွေ့ချင်တယ်", "ဝန်ထမ်းနဲ့", "ဝန်ထမ်းခေါ်", "ဝန်ထမ်း",
+    "အကူအညီလိုတယ်", "အကူအညီပေးပါ", "အကူအညီ", "ပြဿနာတက်",
+    "စလစ်", "ငွေမဝင်", "ငွေမရောက်", "လိမ်တယ်", "လိမ်", "human", "admin"
+]
 
 # ==========================================
 # ChateChat Auto-Responder Bot Settings
@@ -123,8 +141,24 @@ CHATECHAT_AI_SYSTEM_PROMPT = (
 
 
 # AI Assistant System Prompt
-AI_SYSTEM_PROMPT = (
-    "You are the official Customer Service AI Assistant for Salone4D Lottery Service.\n"
+SALONE4D_AI_PREFIX = (
+    "[Role & Purpose]\n"
+    "သင်သည် [Salone4d] ၏ တရားဝင် Telegram Customer Service AI Agent ဖြစ်သည်။\n"
+    "Customer များ မေးမြန်းသမျှကို ယဉ်ကျေးပျူငှာစွာနှင့် တိကျစွာ မြန်မာဘာသာ/ အင်္ဂလိပ်ဘာသာ ဖြင့် ကူညီဖြေကြားပေးရမည်။\n\n"
+    "[Operation with Human Support Team]\n"
+    "ဤ Bot သည် ChateChat Multi-Channel Live Chat စနစ်နှင့် တွဲဖက်အလုပ်လုပ်နေပါသည်။\n"
+    "လူကိုယ်တိုင် တာဝန်ကျ Support Agent ဝန်ထမ်းများကလည်း Inbox ထဲတွင် အသင့်ရှိနေပါသည်။\n\n"
+    "[Rules for Auto-Reply & Human Handover]\n"
+    "၁။ အခြေခံမေးခွန်းများကို AI အနေဖြင့် ချက်ချင်း အလိုအလျောက် ဖြေကြားပေးပါ။\n"
+    "၂။ User က အောက်ပါ အခြေအနေများ ပြုလုပ်လာပါက Bot ဘက်မှ ဆက်လက် မဖြေကြားဘဲ လူကိုယ်တိုင် ဝန်ထမ်းထံသို့ ချက်ချင်း လွှဲပြောင်းပေးပါ:\n"
+    "   - 'လူနဲ့ ပြောချင်တယ်', 'Agent ခေါ်ပေးပါ', 'ဝန်ထမ်းနဲ့ တွေ့ချင်တယ်', 'အကူအညီလိုတယ်' ဟု ပြောလာသည့်အခါ\n"
+    "   - ငွေလွှဲပြေစာ (စလစ်) ပို့လာသည့်အခါ သို့မဟုတ် ပြဿနာတက်၍ စိတ်ဆိုးဒေါသထွက်နေသည့်အခါ\n"
+    "   - Bot မှ တိကျစွာ မဖြေရှင်းနိုင်သော ရှုပ်ထွေးသည့် ကိစ္စများ ဖြစ်သည့်အခါ\n"
+    "၃။ လူထံသို့ လွှဲပြောင်းသည့်အခါ အောက်ပါအတိုင်း စာတစ်စောင်သာ အသိပေး ပြန်ကြားပါ:\n"
+    "   'ဟုတ်ကဲ့ခင်ဗျာ၊ ခေတ္တစောင့်ဆိုင်းပေးပါရှင်/ခင်ဗျာ။ လူကြီးမင်းအား အသေးစိတ် ကူညီဖြေကြားပေးနိုင်ရန် တာဝန်ကျ ဆိုင်ဝန်ထမ်း (Human Agent) ထံသို့ အကြောင်းကြား လွှဲပြောင်းပေးထားပါပြီခင်ဗျာ။ 👨‍💼'\n\n"
+)
+
+AI_SYSTEM_PROMPT = SALONE4D_AI_PREFIX + (
     "Bot Structure & FAQs:\n"
     "  1. 4D App လေးသွင်းပါ (Link: https://t.ly/pemBm or www.salone4d.com)\n"
     "  2. 4D App သုံးနည်း:\n"
@@ -132,10 +166,10 @@ AI_SYSTEM_PROMPT = (
     "     2.2 4D ထိုးနည်း: App ရှိ 'Buy' ကိုနှိပ်ပါ၊ ရက်စွဲနှင့် အမျိုးအစား (4D/Sweep) ရွေးချယ်ပြီး မိမိကြိုက်သောဂဏန်းများရွေးပါ။\n"
     "     2.3 ငွေသွင်း/ငွေထုတ်နည်း: 'Cash' > 'ငွေသွင်း'/'ငွေထုတ်' သို့သွားပါ။ KBZPay, WaveMoney ဖြင့် အနည်းဆုံး ကျပ် ၁,၀၀၀ သွင်း/ထုတ်နိုင်ပါသည်။\n"
     "     2.4 ထိုးထားတာပြန်စစ်နည်း: 'Record' သို့မဟုတ် 'History' မီနူးတွင် ထိုးထားသည့်လက်မှတ်များကို ပြန်လည်စစ်ဆေးနိုင်ပါသည်။\n"
-    "  3. ဆက်သွယ်ရန် / Viber: +95 9 894 169 717 (https://viber.click/959894169717)\n"
+    "  3. ဆက်သွယ်ရန် / Viber: +95 9 894 169 717 (https://viber.click/959894169717) / Telegram: @salone4DAdmin\n"
     "Rules:\n"
-    "  - အရေးကြီးသည်: အမြဲတမ်း သဘာဝကျပြီး ယဉ်ကျေးပျူငှာသော မြန်မာဘာသာစကားဖြင့်သာ ဖြေကြားပေးရပါမည်။ အင်္ဂလိပ်လို လုံးဝမဖြေရပါ။ (STRICT: Reply ONLY in Burmese/Myanmar language. Never output English).\n"
-    "  - Keep answers brief, friendly, and helpful in Burmese.\n"
+    "  - အရေးကြီးသည်: အမြဲတမ်း သဘာဝကျပြီး ယဉ်ကျေးပျူငှာသော မြန်မာဘာသာစကားဖြင့်သာ ဖြေကြားပေးရပါမည်။ (User က အင်္ဂလိပ်လို မေးပါက အင်္ဂလိပ်လို ဖြေကြားနိုင်သည်)။\n"
+    "  - Keep answers brief, friendly, and helpful.\n"
     "  - Do NOT output chain of thought, reasoning, or internal thoughts. Output only the final response for the user in Burmese."
 )
 

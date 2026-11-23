@@ -1,4 +1,5 @@
 import logging
+import os
 import re
 import requests
 import config
@@ -8,7 +9,7 @@ logger = logging.getLogger(__name__)
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 HEADERS = {
-    "Authorization": f"Bearer {config.OPENROUTER_API_KEY}",
+    "Authorization": f"Bearer {getattr(config, 'OPENROUTER_API_KEY', '')}",
     "HTTP-Referer": "https://salone4d.com",
     "X-Title": "Salone4D Customer Bot",
     "Content-Type": "application/json"
@@ -31,85 +32,194 @@ def clean_ai_response(content: str) -> str:
     return content.strip()
 
 
-def get_ai_reply(user_message: str, conversation_history: list = None) -> str:
-    """
-    Get customer service reply from OpenRouter using DeepSeek models.
-    Supports multi-turn conversation memory and suppression of reasoning tokens.
-    """
-    system_prompt = getattr(
-        config,
-        "AI_SYSTEM_PROMPT",
-        (
-            "You are the official Customer Service AI Assistant for Salone4D Lottery Service.\n"
-            "Bot Structure & FAQs:\n"
-            "  1. 4D App လေးသွင်းပါ (Link: https://t.ly/pemBm or www.salone4d.com)\n"
-            "  2. 4D App သုံးနည်း:\n"
-            "     2.1 Register / Login ဝင်နည်း: အကောင့်လုပ်မည် သို့သွားပြီး နာမည်၊ ဖုန်း၊ password ဖြည့်သွင်း၍ ဖွင့်ပါ။\n"
-            "     2.2 4D ထိုးနည်း: App ရှိ 'Buy' ကိုနှိပ်ပါ၊ ရက်စွဲနှင့် အမျိုးအစား (4D/Sweep) ရွေးချယ်ပြီး မိမိကြိုက်သောဂဏန်းများရွေးပါ။\n"
-            "     2.3 ငွေသွင်း/ငွေထုတ်နည်း: 'Cash' > 'ငွေသွင်း'/'ငွေထုတ်' သို့သွားပါ။ KBZPay, WaveMoney ဖြင့် အနည်းဆုံး ကျပ် ၁,၀၀၀ သွင်း/ထုတ်နိုင်ပါသည်။\n"
-            "     2.4 ထိုးထားတာပြန်စစ်နည်း: 'Record' သို့မဟုတ် 'History' မီနူးတွင် ထိုးထားသည့်လက်မှတ်များကို ပြန်လည်စစ်ဆေးနိုင်ပါသည်။\n"
-            "  3. ဆက်သွယ်ရန် / Viber: +95 9 894 169 717 (https://viber.click/959894169717)\n"
-            "Rules:\n"
-            "  - အရေးကြီးသည်: အမြဲတမ်း သဘာဝကျပြီး ယဉ်ကျေးပျူငှာသော မြန်မာဘာသာစကားဖြင့်သာ ဖြေကြားပေးရပါမည်။ အင်္ဂလိပ်လို လုံးဝ မဖြေရပါ။ (STRICT: Reply ONLY in Myanmar/Burmese language. NEVER reply in English).\n"
-            "  - User ၏ အမည်၊ ယခင်မေးခွန်းများနှင့် အကြောင်းအရာများကို အမြဲမှတ်မိနေပြီး ဆက်စပ်ဖြေကြားပေးပါ။\n"
-            "  - အဖြေများကို တိုတိုရှင်းရှင်း၊ ဖော်ရွေစွာနှင့် အထောက်အကူပြုအောင် မြန်မာလိုသာ ဖြေပါ။\n"
-            "  - မေးခွန်းကို တိုက်ရိုက်ဖြေပါ၊ internal thinking သို့မဟုတ် English analysis စာသားများ လုံးဝမထည့်ပါနှင့်။"
-        )
-    )
+def call_gemini_api(system_prompt: str, user_message: str, conversation_history: list = None) -> str:
+    """Direct Google Gemini REST API integration for fast, reliable replies."""
+    gemini_key = getattr(config, "GEMINI_API_KEY", "") or os.getenv("GOOGLE_API_KEY", "")
+    if not gemini_key:
+        return ""
 
-    models_to_try = getattr(
-        config,
-        "OPENROUTER_MODELS",
-        [
-            "baidu/ernie-5.5-flash-preview:free",
-            "google/gemma-4-26b-a4b-it:free",
-            "google/gemma-4-31b-it:free",
-            "recursive/flint-v1.0:free",
-            "openrouter/free"
-        ]
-    )
-
-    # Format full messages payload including memory history
-    if conversation_history:
-        chat_messages = [{"role": "system", "content": system_prompt}] + conversation_history
-    else:
-        chat_messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message}
-        ]
-
-    for model in models_to_try:
+    models = ["gemini-2.5-flash", "gemini-1.5-flash"]
+    for m in models:
         try:
-            payload = {
-                "model": model,
-                "messages": chat_messages,
-                "max_tokens": 500,
-                "temperature": 0.5,
-            }
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={gemini_key}"
+            contents = []
+            if conversation_history:
+                for h in conversation_history:
+                    role = "model" if h.get("role") == "assistant" else "user"
+                    contents.append({"role": role, "parts": [{"text": h.get("content", "")}]})
+            contents.append({"role": "user", "parts": [{"text": user_message}]})
 
-            resp = requests.post(OPENROUTER_URL, headers=HEADERS, json=payload, timeout=15)
+            payload = {
+                "system_instruction": {"parts": [{"text": system_prompt}]},
+                "contents": contents,
+                "generationConfig": {
+                    "temperature": 0.5,
+                    "maxOutputTokens": 600
+                }
+            }
+            resp = requests.post(url, json=payload, timeout=12)
             if resp.status_code == 200:
-                result_json = resp.json()
-                choices = result_json.get("choices", [])
-                if choices:
-                    msg = choices[0].get("message", {})
-                    content = msg.get("content") or ""
-                    cleaned = clean_ai_response(content)
+                data = resp.json()
+                cands = data.get("candidates", [])
+                if cands:
+                    text = cands[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                    cleaned = clean_ai_response(text)
                     if cleaned:
-                        logger.info(f"OpenRouter success with model: {model}")
+                        logger.info(f"Gemini success with model: {m}")
                         return cleaned
             else:
-                logger.warning(f"Model {model} returned status {resp.status_code}")
-
+                logger.warning(f"Gemini {m} returned {resp.status_code}: {resp.text[:150]}")
         except Exception as e:
-            logger.warning(f"Error querying model {model}: {e}")
+            logger.warning(f"Gemini {m} error: {e}")
 
-    # Fallback message if all free models are temporarily busy
+    return ""
+
+
+def smart_fallback_reply(user_message: str) -> str:
+    """
+    Intelligent intent fallback for common customer questions and greetings
+    when upstream AI providers are temporarily slow or rate-limited.
+    """
+    t = (user_message or "").lower().strip()
+
+    # Greetings
+    greetings = ["hi", "hello", "hey", "မင်္ဂလာပါ", "ဟိုင်း", "ဟဲလို", "နေကောင်းလား", "ဆလိုင်း"]
+    if any(t == g or t.startswith(g + " ") for g in greetings):
+        return (
+            "မင်္ဂလာပါခင်ဗျာ 🙏 Salone4D Customer Service မှ ကြိုဆိုပါတယ်။\n"
+            "လူကြီးမင်း သိရှိလိုသည်များကို မေးမြန်းနိုင်ပါသည်ခင်ဗျာ။\n\n"
+            "အောက်ပါခလုတ်များမှတစ်ဆင့်လည်း အချက်အလက်များကို ချက်ချင်း ကြည့်ရှုနိုင်ပါသည် 👇"
+        )
+
+    # Asking if AI is working / Bot query
+    if any(k in t for k in ["ai", "bot", "ဘော့", "ပြောလို့ရလား", "ပြောမရ", "ပြောလို့မရ", "စကားပြော"]):
+        return (
+            "မင်္ဂလာပါခင်ဗျာ 🙏 Salone4D AI Customer Service မှ ကြိုဆိုပါတယ်။\n"
+            "ကျွန်တော့်ကို Salone4D အကောင့်ဖွင့်နည်း၊ 4D ထိုးနည်း၊ ငွေသွင်း/ငွေထုတ်နည်း စသည့် သိလိုသည်များကို တိုက်ရိုက် မေးမြန်းနိုင်ပါသည်ခင်ဗျာ။"
+        )
+
+    # Register / Account
+    if any(k in t for k in ["အကောင့်", "ဖွင့်", "register", "login", "ဝင်နည်း", "အကောင့်"]):
+        return (
+            "📝 <b>Salone4D အကောင့်ဖွင့်နည်း / Login ဝင်နည်း:</b>\n\n"
+            "❶ <b>အကောင့်ဖွင့်ရန်:</b> App ကိုဖွင့်ပြီး 'အကောင့်လုပ်မည်' သို့သွားကာ အမည်၊ ဖုန်းနံပါတ်၊ Password ဖြည့်သွင်း၍ ဖွင့်နိုင်ပါသည်။\n"
+            "❷ <b>Login ဝင်ရန်:</b> အကောင့်ဖွင့်ထားသော ဖုန်းနံပါတ်နှင့် Password ဖြင့် ဝင်ရောက်နိုင်ပါသည်။"
+        )
+
+    # Betting / How to play 4D
+    if any(k in t for k in ["ထိုး", "4d", "ဂဏန်း", "ဝယ်", "buy"]):
+        return (
+            "🎰 <b>Salone4D ထိုးနည်း:</b>\n\n"
+            "• App ၏ အလယ်ဗဟိုရှိ <b>'Buy'</b> ခလုတ်ကို နှိပ်ပါ\n"
+            "• ရက်စွဲနှင့် ထီအမျိုးအစား (4D / Sweep) ရွေးချယ်ပါ\n"
+            "• မိမိကြိုက်နှစ်သက်ရာ ဂဏန်းများ ရွေးချယ်ပြီး 'ထည့်မည်' နှိပ်၍ အတည်ပြုနိုင်ပါသည်ခင်ဗျာ။"
+        )
+
+    # Cash / Deposit / Withdraw
+    if any(k in t for k in ["ငွေ", "သွင်း", "ထုတ်", "kpay", "wave", "cash"]):
+        return (
+            "💳 <b>ငွေသွင်း / ငွေထုတ်နည်း:</b>\n\n"
+            "❶ <b>ငွေသွင်း:</b> 'Cash' > 'ငွေသွင်း' သို့သွားပြီး KBZPay, WaveMoney ဖြင့် အနည်းဆုံး ကျပ် ၁,၀၀၀ စတင် သွင်းနိုင်ပါသည်။\n"
+            "❷ <b>ငွေထုတ်:</b> 'Cash' > 'ငွေထုတ်' တွင် ငွေလက်ခံမည့် ဖုန်းနံပါတ်နှင့် ပမာဏဖြည့်သွင်း၍ ထုတ်ယူနိုင်ပါသည်။"
+        )
+
+    # App download link
+    if any(k in t for k in ["app", "link", "apk", "ဒေါင်း", "down", "ဆော့ဝဲ"]):
+        app_url = getattr(config, "APP_LINK", "https://t.ly/pemBm")
+        return (
+            "📲 <b>Salone4D Application ရယူရန်:</b>\n\n"
+            f"🔗 Download Link: {app_url}\n"
+            "🌐 Website: www.salone4d.com"
+        )
+
+    # Results / Draw check
+    if any(k in t for k in ["ပေါက်စဉ်", "ရလဒ်", "ထွက်", "result", "စစ်"]):
+        return (
+            "🔍 <b>ထိုးထားတာ ပြန်စစ်နည်း:</b>\n\n"
+            "ဝယ်ယူထားသော ထီလက်မှတ်များနှင့် ထိုးဂဏန်းများကို App ထဲရှိ <b>'Record'</b> သို့မဟုတ် <b>'History'</b> မီနူးတွင် စစ်ဆေးနိုင်ပါသည်ခင်ဗျာ။"
+        )
+
+    # Contact / Support
+    if any(k in t for k in ["ဆက်သွယ်", "viber", "admin", "ဖုန်း", "call"]):
+        return (
+            "📞 <b>ဆက်သွယ်ရန်:</b>\n\n"
+            "💬 Viber: +95 9 894 169 717\n"
+            "✈️ Telegram: @salone4DAdmin"
+        )
+
+    # General polite response
     return (
         "မင်္ဂလာပါခင်ဗျာ 🙏\n"
-        "လောလောဆယ် AI စနစ် အနည်းငယ် မအားလပ်သေးပါသဖြင့် အောက်ပါ Main Menu ခလုတ်များမှတစ်ဆင့် အချက်အလက်များကို ကြည့်ရှုနိုင်ပါသည် 👇\n\n"
-        "အသေးစိတ် တိုက်ရိုက်မေးမြန်းလိုပါက Viber: +95 9 894 169 717 သို့ ဆက်သွယ်နိုင်ပါသည်။"
+        "လူကြီးမင်း မေးမြန်းလိုသည်များကို အောက်ပါ Main Menu ခလုတ်များမှတစ်ဆင့် ရွေးချယ်ကြည့်ရှုနိုင်သလို တိုက်ရိုက်လည်း မေးမြန်းနိုင်ပါသည်ခင်ဗျာ 👇\n\n"
+        "အသေးစိတ် တိုက်ရိုက် မေးမြန်းလိုပါက Viber: +95 9 894 169 717 သို့ ဆက်သွယ်နိုင်ပါသည်။"
     )
+
+
+def get_ai_reply(user_message: str, conversation_history: list = None) -> str:
+    """
+    Get customer service reply for Salone4D:
+    1. Try Gemini API if key is present
+    2. Try OpenRouter API with verified free models
+    3. Intelligent intent fallback to always provide a helpful, polite Myanmar reply
+    """
+    system_prompt = getattr(config, "AI_SYSTEM_PROMPT", "")
+
+    # Layer 1: Google Gemini API (if available)
+    gemini_reply = call_gemini_api(system_prompt, user_message, conversation_history)
+    if gemini_reply:
+        return gemini_reply
+
+    # Layer 2: OpenRouter API
+    openrouter_key = getattr(config, "OPENROUTER_API_KEY", "")
+    if openrouter_key:
+        models_to_try = getattr(
+            config,
+            "OPENROUTER_MODELS",
+            [
+                "openrouter/free",
+                "meta-llama/llama-3.3-70b-instruct:free",
+                "nvidia/nemotron-3-ultra-550b-a55b:free",
+                "nvidia/nemotron-3.5-lightning:free",
+                "mistralai/mistral-7b-instruct:free",
+                "deepseek/deepseek-r1:free",
+                "qwen/qwen-2.5-72b-instruct:free",
+            ]
+        )
+
+        if conversation_history:
+            chat_messages = [{"role": "system", "content": system_prompt}] + conversation_history
+        else:
+            chat_messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ]
+
+        for model in models_to_try:
+            try:
+                payload = {
+                    "model": model,
+                    "messages": chat_messages,
+                    "max_tokens": 500,
+                    "temperature": 0.5,
+                }
+                resp = requests.post(OPENROUTER_URL, headers=HEADERS, json=payload, timeout=10)
+                if resp.status_code == 200:
+                    result_json = resp.json()
+                    choices = result_json.get("choices", [])
+                    if choices:
+                        msg = choices[0].get("message", {})
+                        content = msg.get("content") or ""
+                        cleaned = clean_ai_response(content)
+                        if cleaned:
+                            logger.info(f"OpenRouter success with model: {model}")
+                            return cleaned
+                else:
+                    logger.warning(f"Model {model} returned status {resp.status_code}: {resp.text[:120]}")
+            except Exception as e:
+                logger.warning(f"Error querying model {model}: {e}")
+
+    # Layer 3: Smart Intent Fallback
+    return smart_fallback_reply(user_message)
 
 
 def get_chatechat_ai_reply(user_message: str, conversation_history: list = None) -> str:
@@ -137,49 +247,72 @@ def get_chatechat_ai_reply(user_message: str, conversation_history: list = None)
         )
     )
 
-    models_to_try = getattr(
-        config,
-        "OPENROUTER_MODELS",
-        [
-            "baidu/ernie-5.5-flash-preview:free",
-            "google/gemma-4-26b-a4b-it:free",
-            "google/gemma-4-31b-it:free",
-            "recursive/flint-v1.0:free",
-            "openrouter/free"
-        ]
+    # Try Gemini if key is present
+    gemini_reply = call_gemini_api(system_prompt, user_message, conversation_history)
+    if gemini_reply:
+        return gemini_reply
+
+    # Try OpenRouter
+    openrouter_key = getattr(config, "OPENROUTER_API_KEY", "")
+    if openrouter_key:
+        models_to_try = getattr(
+            config,
+            "OPENROUTER_MODELS",
+            [
+                "openrouter/free",
+                "meta-llama/llama-3.3-70b-instruct:free",
+                "nvidia/nemotron-3-ultra-550b-a55b:free",
+                "mistralai/mistral-7b-instruct:free",
+            ]
+        )
+
+        if conversation_history:
+            chat_messages = [{"role": "system", "content": system_prompt}] + conversation_history
+        else:
+            chat_messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ]
+
+        for model in models_to_try:
+            try:
+                payload = {
+                    "model": model,
+                    "messages": chat_messages,
+                    "max_tokens": 400,
+                    "temperature": 0.4,
+                }
+                resp = requests.post(OPENROUTER_URL, headers=HEADERS, json=payload, timeout=10)
+                if resp.status_code == 200:
+                    result_json = resp.json()
+                    choices = result_json.get("choices", [])
+                    if choices:
+                        msg = choices[0].get("message", {})
+                        content = msg.get("content") or ""
+                        cleaned = clean_ai_response(content)
+                        if cleaned:
+                            logger.info(f"ChateChat OpenRouter success with model: {model}")
+                            return cleaned
+                else:
+                    logger.warning(f"ChateChat model {model} returned status {resp.status_code}: {resp.text[:120]}")
+            except Exception as e:
+                logger.warning(f"ChateChat error querying model {model}: {e}")
+
+    # Fallback for ChateChat
+    t = (user_message or "").lower()
+    apk_url = getattr(config, "CHATECHAT_APK_URL", "https://tinyurl.com/chatechat-app")
+    webapp_url = getattr(config, "CHATECHAT_WEBAPP_URL", "https://chatechat.onrender.com")
+
+    if any(k in t for k in ["hi", "hello", "မင်္ဂလာပါ", "ဟိုင်း", "ဟဲလို"]):
+        return "မင်္ဂလာပါခင်ဗျာ 🙏 ChateChat မှ ကြိုဆိုပါတယ်။ ဘာများ ကူညီပေးရမလဲခင်ဗျာ။"
+    if any(k in t for k in ["apk", "app", "download", "ဒေါင်း", "ဆော့ဝဲ"]):
+        return f"ChateChat Android APK ကို {apk_url} တွင် အခမဲ့ ဒေါင်းလုဒ် ရယူနိုင်ပါသည်ခင်ဗျာ။"
+    if any(k in t for k in ["web", "browser", "ကွန်ပျူတာ", "ဖုန်း"]):
+        return f"Browser မှတစ်ဆင့် အသုံးပြုလိုပါက {webapp_url} သို့ တိုက်ရိုက် ဝင်ရောက် အသုံးပြုနိုင်ပါသည်ခင်ဗျာ။"
+    if any(k in t for k in ["အခမဲ့", "ပိုက်ဆံ", "ဈေး", "free", "ကုန်ကျ"]):
+        return "ဟုတ်ကဲ့ခင်ဗျာ ChateChat အသုံးပြုခြင်းသည် ၁၀၀% လုံးဝ အခမဲ့ ဖြစ်ပါသည်ခင်ဗျာ။"
+
+    return (
+        f"မင်္ဂလာပါခင်ဗျာ 🙏 ChateChat ကို Android App ({apk_url}) သို့မဟုတ် Web Browser ({webapp_url}) "
+        "မှတစ်ဆင့် အခမဲ့ အသုံးပြုနိုင်ပါသည်ခင်ဗျာ။"
     )
-
-    if conversation_history:
-        chat_messages = [{"role": "system", "content": system_prompt}] + conversation_history
-    else:
-        chat_messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message}
-        ]
-
-    for model in models_to_try:
-        try:
-            payload = {
-                "model": model,
-                "messages": chat_messages,
-                "max_tokens": 400,
-                "temperature": 0.4,
-            }
-            resp = requests.post(OPENROUTER_URL, headers=HEADERS, json=payload, timeout=12)
-            if resp.status_code == 200:
-                result_json = resp.json()
-                choices = result_json.get("choices", [])
-                if choices:
-                    msg = choices[0].get("message", {})
-                    content = msg.get("content") or ""
-                    cleaned = clean_ai_response(content)
-                    if cleaned:
-                        logger.info(f"ChateChat OpenRouter success with model: {model}")
-                        return cleaned
-            else:
-                logger.warning(f"ChateChat model {model} returned status {resp.status_code}")
-        except Exception as e:
-            logger.warning(f"ChateChat error querying model {model}: {e}")
-
-    return ""
-
