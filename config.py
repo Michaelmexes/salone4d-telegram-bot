@@ -68,16 +68,13 @@ PORT = int(os.getenv("PORT", "10000"))
 # OpenRouter & AI Customer Service Settings
 # ==========================================
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")  # OpenRouter API Key (from .env or environment)
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", os.getenv("GOOGLE_API_KEY", ""))
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 OPENROUTER_MODELS = [
-    "openrouter/free",
-    "meta-llama/llama-3.3-70b-instruct:free",
     "nvidia/nemotron-3-ultra-550b-a55b:free",
-    "nvidia/nemotron-3.5-lightning:free",
-    "mistralai/mistral-7b-instruct:free",
-    "deepseek/deepseek-r1:free",
-    "qwen/qwen-2.5-72b-instruct:free",
+    "google/gemma-4-26b-a4b-it:free",
+    "baidu/ernie-5.5-flash-preview:free",
+    "openrouter/free",
 ]
 
 # Support Contacts & Info

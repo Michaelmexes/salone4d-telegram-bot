@@ -34,7 +34,7 @@ def clean_ai_response(content: str) -> str:
 
 def call_gemini_api(system_prompt: str, user_message: str, conversation_history: list = None) -> str:
     """Direct Google Gemini REST API integration for fast, reliable replies."""
-    gemini_key = getattr(config, "GEMINI_API_KEY", "") or os.getenv("GOOGLE_API_KEY", "")
+    gemini_key = getattr(config, "GEMINI_API_KEY", "") or os.getenv("GEMINI_API_KEY", "")
     if not gemini_key:
         return ""
 
@@ -83,7 +83,7 @@ def smart_fallback_reply(user_message: str) -> str:
     t = (user_message or "").lower().strip()
 
     # Greetings
-    greetings = ["hi", "hello", "hey", "မင်္ဂလာပါ", "ဟိုင်း", "ဟဲလို", "နေကောင်းလား", "ဆလိုင်း"]
+    greetings = ["hi", "hello", "hey", "မင်္ဂလာပါ", "ဟိုင်း", "ဟဲလို", "နေကောင်းလား", "ဆလိုင်း", "mingalarpar", "mingalaba"]
     if any(t == g or t.startswith(g + " ") for g in greetings):
         return (
             "မင်္ဂလာပါခင်ဗျာ 🙏 Salone4D Customer Service မှ ကြိုဆိုပါတယ်။\n"
@@ -92,9 +92,9 @@ def smart_fallback_reply(user_message: str) -> str:
         )
 
     # Asking if AI is working / Bot query
-    if any(k in t for k in ["ai", "bot", "ဘော့", "ပြောလို့ရလား", "ပြောမရ", "ပြောလို့မရ", "စကားပြော"]):
+    if any(k in t for k in ["ai", "bot", "ဘော့", "ပြောလို့ရလား", "ပြောမရ", "ပြောလို့မရ", "စကားပြော", "ဘာလုပ်ပေးနိုင်", "မေးလို့ရ"]):
         return (
-            "မင်္ဂလာပါခင်ဗျာ 🙏 Salone4D AI Customer Service မှ ကြိုဆိုပါတယ်။\n"
+            "မင်္ဂလာပါခင်ဗျာ 🙏 Salone4D AI Customer Service ဖြစ်ပါသည်ခင်ဗျာ။\n"
             "ကျွန်တော့်ကို Salone4D အကောင့်ဖွင့်နည်း၊ 4D ထိုးနည်း၊ ငွေသွင်း/ငွေထုတ်နည်း စသည့် သိလိုသည်များကို တိုက်ရိုက် မေးမြန်းနိုင်ပါသည်ခင်ဗျာ။"
         )
 
@@ -176,13 +176,10 @@ def get_ai_reply(user_message: str, conversation_history: list = None) -> str:
             config,
             "OPENROUTER_MODELS",
             [
-                "openrouter/free",
-                "meta-llama/llama-3.3-70b-instruct:free",
                 "nvidia/nemotron-3-ultra-550b-a55b:free",
-                "nvidia/nemotron-3.5-lightning:free",
-                "mistralai/mistral-7b-instruct:free",
-                "deepseek/deepseek-r1:free",
-                "qwen/qwen-2.5-72b-instruct:free",
+                "google/gemma-4-26b-a4b-it:free",
+                "baidu/ernie-5.5-flash-preview:free",
+                "openrouter/free",
             ]
         )
 
@@ -259,10 +256,10 @@ def get_chatechat_ai_reply(user_message: str, conversation_history: list = None)
             config,
             "OPENROUTER_MODELS",
             [
-                "openrouter/free",
-                "meta-llama/llama-3.3-70b-instruct:free",
                 "nvidia/nemotron-3-ultra-550b-a55b:free",
-                "mistralai/mistral-7b-instruct:free",
+                "google/gemma-4-26b-a4b-it:free",
+                "baidu/ernie-5.5-flash-preview:free",
+                "openrouter/free",
             ]
         )
 
