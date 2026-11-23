@@ -68,13 +68,15 @@ PORT = int(os.getenv("PORT", "10000"))
 # OpenRouter & AI Customer Service Settings
 # ==========================================
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")  # OpenRouter API Key (from .env or environment)
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", os.getenv("GOOGLE_API_KEY", ""))
 
 OPENROUTER_MODELS = [
-    "nvidia/nemotron-3-ultra-550b-a55b:free",
-    "google/gemma-4-26b-a4b-it:free",
-    "baidu/ernie-5.5-flash-preview:free",
     "openrouter/free",
+    "recursive/flint-v1.0:free",
+    "liquid/lfm-3-1.7b:free",
+    "nvidia/nemotron-3.5-lightning:free",
+    "baidu/ernie-5.5-flash-preview:free",
+    "inclusionai/ling-3.2-flash:free",
 ]
 
 # Support Contacts & Info
@@ -114,6 +116,10 @@ if not CHATECHAT_BOT_TOKEN:
                 CHATECHAT_BOT_TOKEN = _f.read().strip()
         except Exception:
             pass
+
+# Strict isolation: ensure ChateChat bot token can NEVER be identical to Salone4D BOT_TOKEN
+if CHATECHAT_BOT_TOKEN and BOT_TOKEN and CHATECHAT_BOT_TOKEN.strip() == BOT_TOKEN.strip():
+    CHATECHAT_BOT_TOKEN = ""
 CHATECHAT_BOT_USERNAME = os.getenv("CHATECHAT_BOT_USERNAME", "@chatechatbot")
 CHATECHAT_APK_URL = os.getenv("CHATECHAT_APK_URL", "https://tinyurl.com/chatechat-app")
 CHATECHAT_WEBAPP_URL = os.getenv("CHATECHAT_WEBAPP_URL", "https://chatechat.onrender.com")

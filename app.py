@@ -281,8 +281,12 @@ def run_chatechat_bot():
     """Run ChateChat Telegram Auto-Responder Bot."""
     try:
         token = getattr(config, "CHATECHAT_BOT_TOKEN", None)
+        salone_token = getattr(config, "BOT_TOKEN", None)
         if not token:
             logger.info("ℹ️ ChateChat bot token not configured. Skipping.")
+            return
+        if salone_token and str(token).strip() == str(salone_token).strip():
+            logger.error("❌ CHATECHAT_BOT_TOKEN is identical to Salone4D BOT_TOKEN! Skipping ChateChat to prevent collision.")
             return
         import chatechat_bot
         logger.info("🤖 Starting ChateChat Auto-Responder Bot (@chatechatbot)...")

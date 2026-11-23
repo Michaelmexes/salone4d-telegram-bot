@@ -187,8 +187,9 @@ async def setup_bot_commands(application: Application):
 
 def main():
     token = getattr(config, "CHATECHAT_BOT_TOKEN", None)
-    if not token or token == "YOUR_CHATECHAT_BOT_TOKEN_HERE":
-        logger.error("❌ config.py တွင် CHATECHAT_BOT_TOKEN မသတ်မှတ်ရသေးပါ။")
+    salone_token = getattr(config, "BOT_TOKEN", None)
+    if not token or token == "YOUR_CHATECHAT_BOT_TOKEN_HERE" or (salone_token and str(token).strip() == str(salone_token).strip()):
+        logger.error("❌ config.py တွင် CHATECHAT_BOT_TOKEN မသတ်မှတ်ရသေးပါ (သို့မဟုတ် Salone4D BOT_TOKEN နှင့် ထပ်နေပါသည်)။")
         return
 
     # Ensure a dedicated asyncio event loop in this thread

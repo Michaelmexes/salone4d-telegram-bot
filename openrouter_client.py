@@ -32,9 +32,16 @@ def clean_ai_response(content: str) -> str:
     return content.strip()
 
 
+_gemini_available = True
+
+
 def call_gemini_api(system_prompt: str, user_message: str, conversation_history: list = None) -> str:
     """Direct Google Gemini REST API integration for fast, reliable replies."""
-    gemini_key = getattr(config, "GEMINI_API_KEY", "") or os.getenv("GEMINI_API_KEY", "")
+    global _gemini_available
+    if not _gemini_available:
+        return ""
+
+    gemini_key = getattr(config, "GEMINI_API_KEY", "") or os.getenv("GOOGLE_API_KEY", "")
     if not gemini_key:
         return ""
 
@@ -53,11 +60,11 @@ def call_gemini_api(system_prompt: str, user_message: str, conversation_history:
                 "system_instruction": {"parts": [{"text": system_prompt}]},
                 "contents": contents,
                 "generationConfig": {
-                    "temperature": 0.5,
+                    "temperature": 0.4,
                     "maxOutputTokens": 600
                 }
             }
-            resp = requests.post(url, json=payload, timeout=12)
+            resp = requests.post(url, json=payload, timeout=10)
             if resp.status_code == 200:
                 data = resp.json()
                 cands = data.get("candidates", [])
@@ -67,6 +74,10 @@ def call_gemini_api(system_prompt: str, user_message: str, conversation_history:
                     if cleaned:
                         logger.info(f"Gemini success with model: {m}")
                         return cleaned
+            elif resp.status_code == 403:
+                logger.warning("Gemini API free tier not available for this key (403). Bypassing Gemini to use OpenRouter.")
+                _gemini_available = False
+                return ""
             else:
                 logger.warning(f"Gemini {m} returned {resp.status_code}: {resp.text[:150]}")
         except Exception as e:
@@ -87,14 +98,14 @@ def smart_fallback_reply(user_message: str) -> str:
     if any(t == g or t.startswith(g + " ") for g in greetings):
         return (
             "မင်္ဂလာပါခင်ဗျာ 🙏 Salone4D Customer Service မှ ကြိုဆိုပါတယ်။\n"
-            "လူကြီးမင်း သိရှိလိုသည်များကို မေးမြန်းနိုင်ပါသည်ခင်ဗျာ။\n\n"
-            "အောက်ပါခလုတ်များမှတစ်ဆင့်လည်း အချက်အလက်များကို ချက်ချင်း ကြည့်ရှုနိုင်ပါသည် 👇"
+            "လူကြီးမင်း သိရှိလိုသည်များကို မေးမြန်းနိုင်ပါသည်ခင်ဗျာ (ဥပမာ- အကောင့်ဖွင့်နည်း၊ 4D ထိုးနည်း၊ ငွေသွင်းငွေထုတ်နည်း)။\n\n"
+            "အောက်ပါ Main Menu ခလုတ်များမှတစ်ဆင့်လည်း အချက်အလက်များကို ချက်ချင်း ကြည့်ရှုနိုင်ပါသည် 👇"
         )
 
     # Asking if AI is working / Bot query
-    if any(k in t for k in ["ai", "bot", "ဘော့", "ပြောလို့ရလား", "ပြောမရ", "ပြောလို့မရ", "စကားပြော", "ဘာလုပ်ပေးနိုင်", "မေးလို့ရ"]):
+    if any(k in t for k in ["ai", "bot", "ဘော့", "ပြောလို့ရလား", "ပြောမရ", "ပြောလို့မရ", "စကားပြော", "မေးလို့ရလား", "ဖြေပေး"]):
         return (
-            "မင်္ဂလာပါခင်ဗျာ 🙏 Salone4D AI Customer Service ဖြစ်ပါသည်ခင်ဗျာ။\n"
+            "မင်္ဂလာပါခင်ဗျာ 🙏 Salone4D AI Customer Service မှ ကြိုဆိုပါတယ်။\n"
             "ကျွန်တော့်ကို Salone4D အကောင့်ဖွင့်နည်း၊ 4D ထိုးနည်း၊ ငွေသွင်း/ငွေထုတ်နည်း စသည့် သိလိုသည်များကို တိုက်ရိုက် မေးမြန်းနိုင်ပါသည်ခင်ဗျာ။"
         )
 
@@ -158,10 +169,29 @@ def smart_fallback_reply(user_message: str) -> str:
 def get_ai_reply(user_message: str, conversation_history: list = None) -> str:
     """
     Get customer service reply for Salone4D:
-    1. Try Gemini API if key is present
-    2. Try OpenRouter API with verified free models
-    3. Intelligent intent fallback to always provide a helpful, polite Myanmar reply
+    1. Instant match for standard greetings and AI status queries (0ms latency)
+    2. Try Gemini API if key is present
+    3. Try OpenRouter API with verified free models (fast 5s timeout)
+    4. Intelligent intent fallback to always provide a helpful, polite Myanmar reply
     """
+    t = (user_message or "").lower().strip()
+
+    # Fast-path 1: Greetings (Instant 0ms response)
+    greetings = ["hi", "hello", "hey", "မင်္ဂလာပါ", "ဟိုင်း", "ဟဲလို", "နေကောင်းလား", "ဆလိုင်း", "mingalarpar", "mingalaba"]
+    if any(t == g or t.startswith(g + " ") for g in greetings):
+        return (
+            "မင်္ဂလာပါခင်ဗျာ 🙏 Salone4D Customer Service မှ ကြိုဆိုပါတယ်။\n"
+            "လူကြီးမင်း သိရှိလိုသည်များကို မေးမြန်းနိုင်ပါသည်ခင်ဗျာ (ဥပမာ- အကောင့်ဖွင့်နည်း၊ 4D ထိုးနည်း၊ ငွေသွင်းငွေထုတ်နည်း)။\n\n"
+            "အောက်ပါ Main Menu ခလုတ်များမှတစ်ဆင့်လည်း အချက်အလက်များကို ချက်ချင်း ကြည့်ရှုနိုင်ပါသည် 👇"
+        )
+
+    # Fast-path 2: Asking if AI is working / Bot query
+    if any(k in t for k in ["ai", "bot", "ဘော့", "ပြောလို့ရလား", "ပြောမရ", "ပြောလို့မရ", "စကားပြော", "မေးလို့ရလား", "ဖြေပေး"]):
+        return (
+            "မင်္ဂလာပါခင်ဗျာ 🙏 Salone4D AI Customer Service မှ ကြိုဆိုပါတယ်။\n"
+            "ကျွန်တော့်ကို Salone4D အကောင့်ဖွင့်နည်း၊ 4D ထိုးနည်း၊ ငွေသွင်း/ငွေထုတ်နည်း စသည့် သိလိုသည်များကို တိုက်ရိုက် မေးမြန်းနိုင်ပါသည်ခင်ဗျာ။"
+        )
+
     system_prompt = getattr(config, "AI_SYSTEM_PROMPT", "")
 
     # Layer 1: Google Gemini API (if available)
@@ -176,12 +206,11 @@ def get_ai_reply(user_message: str, conversation_history: list = None) -> str:
             config,
             "OPENROUTER_MODELS",
             [
-                "nvidia/nemotron-3-ultra-550b-a55b:free",
-                "google/gemma-4-26b-a4b-it:free",
-                "baidu/ernie-5.5-flash-preview:free",
                 "openrouter/free",
+                "recursive/flint-v1.0:free",
+                "liquid/lfm-3-1.7b:free",
             ]
-        )
+        )[:3]
 
         if conversation_history:
             chat_messages = [{"role": "system", "content": system_prompt}] + conversation_history
@@ -197,9 +226,10 @@ def get_ai_reply(user_message: str, conversation_history: list = None) -> str:
                     "model": model,
                     "messages": chat_messages,
                     "max_tokens": 500,
-                    "temperature": 0.5,
+                    "temperature": 0.4,
+                    "repetition_penalty": 1.15,
                 }
-                resp = requests.post(OPENROUTER_URL, headers=HEADERS, json=payload, timeout=10)
+                resp = requests.post(OPENROUTER_URL, headers=HEADERS, json=payload, timeout=6)
                 if resp.status_code == 200:
                     result_json = resp.json()
                     choices = result_json.get("choices", [])
@@ -224,6 +254,20 @@ def get_chatechat_ai_reply(user_message: str, conversation_history: list = None)
     Get simple customer service AI reply for ChateChat.
     Keeps answers very short, concise, and focused strictly on ChateChat.
     """
+    t = (user_message or "").lower().strip()
+    apk_url = getattr(config, "CHATECHAT_APK_URL", "https://tinyurl.com/chatechat-app")
+    webapp_url = getattr(config, "CHATECHAT_WEBAPP_URL", "https://chatechat.onrender.com")
+
+    # Fast-path 0ms responses for standard ChateChat questions
+    if any(k in t for k in ["hi", "hello", "မင်္ဂလာပါ", "ဟိုင်း", "ဟဲလို"]):
+        return "မင်္ဂလာပါခင်ဗျာ 🙏 ChateChat မှ ကြိုဆိုပါတယ်။ ဘာများ ကူညီပေးရမလဲခင်ဗျာ။"
+    if any(k in t for k in ["apk", "app", "download", "ဒေါင်း", "ဆော့ဝဲ"]):
+        return f"ChateChat Android APK ကို {apk_url} တွင် အခမဲ့ ဒေါင်းလုဒ် ရယူနိုင်ပါသည်ခင်ဗျာ။"
+    if any(k in t for k in ["web", "browser", "ကွန်ပျူတာ", "ဖုန်း"]):
+        return f"Browser မှတစ်ဆင့် အသုံးပြုလိုပါက {webapp_url} သို့ တိုက်ရိုက် ဝင်ရောက် အသုံးပြုနိုင်ပါသည်ခင်ဗျာ။"
+    if any(k in t for k in ["အခမဲ့", "ပိုက်ဆံ", "ဈေး", "free", "ကုန်ကျ"]):
+        return "ဟုတ်ကဲ့ခင်ဗျာ ChateChat အသုံးပြုခြင်းသည် ၁၀၀% လုံးဝ အခမဲ့ ဖြစ်ပါသည်ခင်ဗျာ။"
+
     system_prompt = getattr(
         config,
         "CHATECHAT_AI_SYSTEM_PROMPT",
@@ -256,12 +300,11 @@ def get_chatechat_ai_reply(user_message: str, conversation_history: list = None)
             config,
             "OPENROUTER_MODELS",
             [
-                "nvidia/nemotron-3-ultra-550b-a55b:free",
-                "google/gemma-4-26b-a4b-it:free",
-                "baidu/ernie-5.5-flash-preview:free",
                 "openrouter/free",
+                "recursive/flint-v1.0:free",
+                "liquid/lfm-3-1.7b:free",
             ]
-        )
+        )[:3]
 
         if conversation_history:
             chat_messages = [{"role": "system", "content": system_prompt}] + conversation_history
@@ -277,9 +320,10 @@ def get_chatechat_ai_reply(user_message: str, conversation_history: list = None)
                     "model": model,
                     "messages": chat_messages,
                     "max_tokens": 400,
-                    "temperature": 0.4,
+                    "temperature": 0.3,
+                    "repetition_penalty": 1.15,
                 }
-                resp = requests.post(OPENROUTER_URL, headers=HEADERS, json=payload, timeout=10)
+                resp = requests.post(OPENROUTER_URL, headers=HEADERS, json=payload, timeout=6)
                 if resp.status_code == 200:
                     result_json = resp.json()
                     choices = result_json.get("choices", [])
@@ -294,20 +338,6 @@ def get_chatechat_ai_reply(user_message: str, conversation_history: list = None)
                     logger.warning(f"ChateChat model {model} returned status {resp.status_code}: {resp.text[:120]}")
             except Exception as e:
                 logger.warning(f"ChateChat error querying model {model}: {e}")
-
-    # Fallback for ChateChat
-    t = (user_message or "").lower()
-    apk_url = getattr(config, "CHATECHAT_APK_URL", "https://tinyurl.com/chatechat-app")
-    webapp_url = getattr(config, "CHATECHAT_WEBAPP_URL", "https://chatechat.onrender.com")
-
-    if any(k in t for k in ["hi", "hello", "မင်္ဂလာပါ", "ဟိုင်း", "ဟဲလို"]):
-        return "မင်္ဂလာပါခင်ဗျာ 🙏 ChateChat မှ ကြိုဆိုပါတယ်။ ဘာများ ကူညီပေးရမလဲခင်ဗျာ။"
-    if any(k in t for k in ["apk", "app", "download", "ဒေါင်း", "ဆော့ဝဲ"]):
-        return f"ChateChat Android APK ကို {apk_url} တွင် အခမဲ့ ဒေါင်းလုဒ် ရယူနိုင်ပါသည်ခင်ဗျာ။"
-    if any(k in t for k in ["web", "browser", "ကွန်ပျူတာ", "ဖုန်း"]):
-        return f"Browser မှတစ်ဆင့် အသုံးပြုလိုပါက {webapp_url} သို့ တိုက်ရိုက် ဝင်ရောက် အသုံးပြုနိုင်ပါသည်ခင်ဗျာ။"
-    if any(k in t for k in ["အခမဲ့", "ပိုက်ဆံ", "ဈေး", "free", "ကုန်ကျ"]):
-        return "ဟုတ်ကဲ့ခင်ဗျာ ChateChat အသုံးပြုခြင်းသည် ၁၀၀% လုံးဝ အခမဲ့ ဖြစ်ပါသည်ခင်ဗျာ။"
 
     return (
         f"မင်္ဂလာပါခင်ဗျာ 🙏 ChateChat ကို Android App ({apk_url}) သို့မဟုတ် Web Browser ({webapp_url}) "

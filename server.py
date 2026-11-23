@@ -162,7 +162,7 @@ TEXTS = {
 }
 FALLBACK = (
     "မင်္ဂလာပါခင်ဗျာ 🙏 Salone4D Customer Service မှ ကြိုဆိုပါတယ်။\n"
-    "လူကြီးမင်း မေးမြန်းလိုသည်များကို အောက်ပါ Main Menu ခလုတ်များမှတစ်ဆင့် ရွေးချယ်ကြည့်ရှုနိုင်ပါသည် 👇\n\n"
+    "လူကြီးမင်း မေးမြန်းလိုသည်များကို အောက်ပါ Main Menu ခလုတ်များမှတစ်ဆင့် ရွေးချယ်နိုင်သလို၊ တိုက်ရိုက်လည်း မေးမြန်းနိုင်ပါသည်ခင်ဗျာ 👇\n\n"
     "အသေးစိတ် တိုက်ရိုက်မေးမြန်းလိုပါက Viber: +95 9 894 169 717 သို့ ဆက်သွယ်နိုင်ပါသည်။"
 )
 
@@ -321,7 +321,12 @@ def run_bot():
 
 # -------- ChateChat Auto-Responder Bot & Webhook Relay ----------
 def get_chatechat_token():
+    salone_token = getattr(config, "BOT_TOKEN", None) or os.getenv("BOT_TOKEN", "")
     t = getattr(config, "CHATECHAT_BOT_TOKEN", None) or os.getenv("CHATECHAT_BOT_TOKEN", "")
+    # Strict isolation: ChateChat must NEVER use Salone4D bot token
+    if t and salone_token and t.strip() == salone_token.strip():
+        logger.error("❌ CHATECHAT_BOT_TOKEN is identical to Salone4D BOT_TOKEN! Disabling ChateChat to prevent collision.")
+        return ""
     if t:
         return t.strip()
     token_file = os.path.join("data", "chatechat_token.txt")
@@ -329,6 +334,8 @@ def get_chatechat_token():
         try:
             with open(token_file, "r", encoding="utf-8") as f:
                 saved = f.read().strip()
+                if saved and salone_token and saved == salone_token.strip():
+                    return ""
                 if saved:
                     os.environ["CHATECHAT_BOT_TOKEN"] = saved
                     setattr(config, "CHATECHAT_BOT_TOKEN", saved)

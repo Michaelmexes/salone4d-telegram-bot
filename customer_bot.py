@@ -261,10 +261,7 @@ async def handle_user_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     except Exception as e:
         logger.error(f"Error querying OpenRouter: {e}")
-        reply_text = (
-            "မင်္ဂလာပါခင်ဗျာ 🙏\n"
-            "အသေးစိတ် သိရှိလိုပါက အောက်ပါ Main Menu ခလုတ်များမှတစ်ဆင့် ဝင်ရောက်ကြည့်ရှုနိုင်ပါသည် 👇"
-        )
+        reply_text = openrouter_client.smart_fallback_reply(user_text)
 
     # Save AI response to memory
     memory_manager.add_message(user_id, "assistant", reply_text)
