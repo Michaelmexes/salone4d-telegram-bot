@@ -71,12 +71,10 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")  # OpenRouter API Key (
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", os.getenv("GOOGLE_API_KEY", ""))
 
 OPENROUTER_MODELS = [
-    "openrouter/free",
-    "recursive/flint-v1.0:free",
-    "liquid/lfm-3-1.7b:free",
-    "nvidia/nemotron-3.5-lightning:free",
-    "baidu/ernie-5.5-flash-preview:free",
-    "inclusionai/ling-3.2-flash:free",
+    "google/gemini-2.5-flash-lite",  # $0.10/1M In, $0.40/1M Out (Cost အနည်းဆုံး၊ 1.5s ဖြင့် အမြန်ဆုံးနှင့် မြန်မာလို အကောင်းဆုံးနားလည်)
+    "google/gemini-2.5-flash",       # $0.30/1M In, $2.50/1M Out (အရည်အသွေးအမြင့်ဆုံး၊ အလွန်မြန်ဆန်)
+    "deepseek/deepseek-chat",        # $0.25/1M In, $1.00/1M Out (DeepSeek V3 တိကျရှင်းလင်း)
+    "openrouter/free",               # Free fallback (အရေးပေါ် Backup)
 ]
 
 # Support Contacts & Info
@@ -173,7 +171,7 @@ AI_SYSTEM_PROMPT = SALONE4D_AI_PREFIX + (
     "Rules:\n"
     "  - အရေးကြီးသည်: အမြဲတမ်း သဘာဝကျပြီး ယဉ်ကျေးပျူငှာသော မြန်မာဘာသာစကားဖြင့်သာ ဖြေကြားပေးရပါမည်။ (User က အင်္ဂလိပ်လို မေးပါက အင်္ဂလိပ်လို ဖြေကြားနိုင်သည်)။\n"
     "  - Keep answers brief, friendly, and helpful.\n"
-    "  - Do NOT output chain of thought, reasoning, or internal thoughts. Output only the final response for the user in Burmese."
+    "  - Do NOT output translation tags (such as [English Translation:...]), markdown preamble brackets, reasoning, or chain-of-thought analysis. Output ONLY the clean final response for the user in Burmese."
 )
 
 # ==========================================

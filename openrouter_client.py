@@ -24,6 +24,9 @@ def clean_ai_response(content: str) -> str:
     # Remove <think>...</think> tags if model uses them
     content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL)
 
+    # Remove translation tags or preamble brackets like [English Translation: ...] or [Burmese: ...]
+    content = re.sub(r"^\[(English Translation|Translation|Burmese|Myanmar):.*?\]\s*", "", content, flags=re.IGNORECASE)
+
     # If the response starts with "Here's a thinking process:" or similar analysis preamble
     if "Here's a thinking process:" in content:
         parts = content.split("Here's a thinking process:")
@@ -206,11 +209,12 @@ def get_ai_reply(user_message: str, conversation_history: list = None) -> str:
             config,
             "OPENROUTER_MODELS",
             [
+                "google/gemini-2.5-flash-lite",
+                "google/gemini-2.5-flash",
+                "deepseek/deepseek-chat",
                 "openrouter/free",
-                "recursive/flint-v1.0:free",
-                "liquid/lfm-3-1.7b:free",
             ]
-        )[:3]
+        )[:4]
 
         if conversation_history:
             chat_messages = [{"role": "system", "content": system_prompt}] + conversation_history
@@ -300,11 +304,12 @@ def get_chatechat_ai_reply(user_message: str, conversation_history: list = None)
             config,
             "OPENROUTER_MODELS",
             [
+                "google/gemini-2.5-flash-lite",
+                "google/gemini-2.5-flash",
+                "deepseek/deepseek-chat",
                 "openrouter/free",
-                "recursive/flint-v1.0:free",
-                "liquid/lfm-3-1.7b:free",
             ]
-        )[:3]
+        )[:4]
 
         if conversation_history:
             chat_messages = [{"role": "system", "content": system_prompt}] + conversation_history
